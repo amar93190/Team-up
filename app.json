@@ -14,6 +14,10 @@
 			"config": {
 				"usesNonExemptEncryption": false
 			},
+			"infoPlist": {
+				"NSPhotoLibraryUsageDescription": "Cette app nécessite l'accès à votre galerie pour choisir une photo de profil.",
+				"NSCameraUsageDescription": "Cette app nécessite l'accès à votre caméra pour prendre une photo de profil."
+			},
 			"splash": {
 				"image": "./assets/splash.png",
 				"resizeMode": "cover",

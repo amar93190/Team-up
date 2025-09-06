@@ -35,3 +35,145 @@ For TypeScript (`tsconfig.json`) projects:
 ```
 
 [Configuration Example Code](../tsconfig.json)
+
+## Supabase Profiles (SQL)
+
+Add this table and policies in your Supabase project:
+
+```sql
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  first_name text,
+  last_name text,
+  age int,
+  avatar_url text,
+  region_id int references public.regions(id),
+  role text check (role in ('participant','organizer','both')),
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+alter table public.profiles enable row level security;
+
+create policy "Profiles are viewable by owners" on public.profiles
+  for select using (auth.uid() = id);
+
+create policy "Profiles can be upserted by owners" on public.profiles
+  for insert with check (auth.uid() = id);
+
+create policy "Profiles can be updated by owners" on public.profiles
+  for update using (auth.uid() = id);
+
+create or replace function public.handle_profiles_updated()
+returns trigger as $$
+begin
+  NEW.updated_at = now();
+  return NEW;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_profiles_updated on public.profiles;
+create trigger on_profiles_updated
+  before update on public.profiles
+  for each row execute function public.handle_profiles_updated();
+```
+
+Create a public storage bucket and allow authenticated uploads:
+
+```sql
+insert into storage.buckets (id, name, public) values ('public', 'public', true)
+  on conflict (id) do nothing;
+
+-- Allow users to read public files
+create policy "Public read" on storage.objects
+  for select using (bucket_id = 'public');
+
+-- Allow owners to upload/update their own avatar files
+create policy "Authenticated can upload to public" on storage.objects
+  for insert with check (bucket_id = 'public' and auth.role() = 'authenticated');
+create policy "Authenticated can update own files" on storage.objects
+  for update using (bucket_id = 'public' and auth.role() = 'authenticated');
+```
+
+Create regions table and seed French regions:
+
+```sql
+create table if not exists public.regions (
+  id serial primary key,
+  code text unique,
+  name text not null
+);
+
+insert into public.regions (code, name) values
+  ('84','Auvergne-Rhône-Alpes'),
+  ('27','Bourgogne-Franche-Comté'),
+  ('53','Bretagne'),
+  ('24','Centre-Val de Loire'),
+  ('94','Corse'),
+  ('44','Grand Est'),
+  ('32','Hauts-de-France'),
+  ('11','Île-de-France'),
+  ('28','Normandie'),
+  ('75','Nouvelle-Aquitaine'),
+  ('76','Occitanie'),
+  ('52','Pays de la Loire'),
+  ('93','Provence-Alpes-Côte d\'Azur'),
+  ('01','Guadeloupe'),
+  ('02','Martinique'),
+  ('03','Guyane'),
+  ('04','La Réunion'),
+  ('06','Mayotte')
+on conflict (code) do nothing;
+```
+
+Create sports tables and seed (with emoji):
+
+```sql
+create table if not exists public.sports (
+  id serial primary key,
+  code text unique,
+  name text not null,
+  emoji text
+);
+
+create table if not exists public.user_sports (
+  user_id uuid references auth.users(id) on delete cascade,
+  sport_id int references public.sports(id) on delete cascade,
+  primary key (user_id, sport_id)
+);
+
+alter table public.user_sports enable row level security;
+
+create policy "user can select own sports" on public.user_sports
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Seed sports with emojis
+insert into public.sports (code, name, emoji) values
+  ('running','Course à pied','🏃'),
+  ('cycling','Cyclisme','🚴'),
+  ('swimming','Natation','🏊'),
+  ('football','Football','⚽'),
+  ('basketball','Basketball','🏀'),
+  ('tennis','Tennis','🎾'),
+  ('badminton','Badminton','🏸'),
+  ('yoga','Yoga','🧘'),
+  ('gym','Musculation/Fitness','🏋️'),
+  ('volleyball','Volleyball','🏐'),
+  ('rugby','Rugby','🏉'),
+  ('handball','Handball','🤾'),
+  ('boxing','Boxe','🥊'),
+  ('mma','MMA','🥊'),
+  ('karate','Karaté','🥋'),
+  ('judo','Judo','🥋'),
+  ('dance','Danse','💃'),
+  ('escalade','Escalade','🧗'),
+  ('ski','Ski','🎿'),
+  ('surf','Surf','🏄'),
+  ('skateboard','Skateboard','🛹'),
+  ('golf','Golf','⛳'),
+  ('table_tennis','Tennis de table','🏓'),
+  ('hiking','Randonnée','🥾'),
+  ('climbing','Escalade','🧗'),
+  ('e_sport','E-sport','🎮')
+on conflict (code) do nothing;
+```
