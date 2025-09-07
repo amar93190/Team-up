@@ -199,6 +199,60 @@ create table if not exists public.events (
   created_at timestamptz default now()
 );
 
+-- Registrations
+create table if not exists public.event_registrations (
+  event_id uuid references public.events(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (event_id, user_id)
+);
+
+alter table public.event_registrations enable row level security;
+
+create policy "users can manage their registrations" on public.event_registrations
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Registration workflow with status & capacity enforcement
+alter table public.event_registrations
+  add column if not exists status text
+    check (status in ('pending','approved','rejected')) default 'pending',
+  add column if not exists approved_at timestamptz;
+
+create policy "owner can update registration status" on public.event_registrations
+  for update using (
+    exists (
+      select 1 from public.events e
+      where e.id = event_registrations.event_id and e.owner_id = auth.uid()
+    )
+  );
+
+create policy "owner can view registrations" on public.event_registrations
+  for select using (
+    exists (
+      select 1 from public.events e
+      where e.id = event_registrations.event_id and e.owner_id = auth.uid()
+    )
+  );
+
+create or replace function public.enforce_capacity()
+returns trigger as $$
+begin
+  if NEW.status = 'approved' and (select count(*) from public.event_registrations
+    where event_id = NEW.event_id and status = 'approved')
+    >= (select capacity from public.events where id = NEW.event_id) then
+    raise exception 'Capacity reached';
+  end if;
+  if NEW.status = 'approved' and (TG_OP = 'UPDATE' and OLD.status is distinct from 'approved') then
+    NEW.approved_at := now();
+  end if;
+  return NEW;
+end; $$ language plpgsql;
+
+drop trigger if exists trg_enforce_capacity on public.event_registrations;
+create trigger trg_enforce_capacity
+before insert or update on public.event_registrations
+for each row execute function public.enforce_capacity();
+
 alter table public.events enable row level security;
 
 create policy "events are viewable by all" on public.events
