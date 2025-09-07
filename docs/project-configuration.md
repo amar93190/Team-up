@@ -177,3 +177,39 @@ insert into public.sports (code, name, emoji) values
   ('e_sport','E-sport','🎮')
 on conflict (code) do nothing;
 ```
+
+Create events table and policies:
+
+```sql
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references auth.users(id) on delete cascade,
+  title text not null,
+  description text,
+  start_at timestamptz,
+  level text check (level in ('beginner','intermediate','advanced','all')) default 'all',
+  capacity int check (capacity between 1 and 100),
+  sport_id int references public.sports(id),
+  city text,
+  address_text text,
+  place_id text,
+  latitude double precision,
+  longitude double precision,
+  cover_url text,
+  created_at timestamptz default now()
+);
+
+alter table public.events enable row level security;
+
+create policy "events are viewable by all" on public.events
+  for select using (true);
+
+create policy "owners can insert events" on public.events
+  for insert with check (auth.uid() = owner_id);
+
+create policy "owners can update their events" on public.events
+  for update using (auth.uid() = owner_id);
+
+create policy "owners can delete their events" on public.events
+  for delete using (auth.uid() = owner_id);
+```

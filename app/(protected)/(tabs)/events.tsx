@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { router } from "expo-router";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -11,6 +12,9 @@ export default function EventsScreen() {
 			<Muted className="text-center">Suivi de tes inscriptions</Muted>
 			<Button className="w-full" variant="secondary">
 				<Text>Voir les détails d’un événement</Text>
+			</Button>
+			<Button className="w-full" variant="default" onPress={() => router.push("/(protected)/events/create")}> 
+				<Text>Créer un événement</Text>
 			</Button>
 		</View>
 	);
