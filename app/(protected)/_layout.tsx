@@ -9,6 +9,7 @@ export default function ProtectedLayout() {
 		>
 			<Stack.Screen name="(tabs)" />
 			<Stack.Screen name="modal" options={{ presentation: "modal" }} />
+			<Stack.Screen name="notifications" options={{ headerShown: true, title: "Notifications" }} />
 			<Stack.Screen
 				name="chat"
 				options={{

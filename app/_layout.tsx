@@ -4,6 +4,10 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 
 import { AuthProvider, useAuth } from "@/context/supabase-provider";
+import { ToastProvider } from "@/components/ui/toast";
+import { NotificationCenterProvider } from "@/context/notification-center";
+import { useEffect } from "react";
+import { registerForPushNotificationsAsync, savePushToken } from "@/lib/push";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,7 +19,11 @@ SplashScreen.setOptions({
 export default function RootLayout() {
 	return (
 		<AuthProvider>
-			<RootNavigator />
+			<NotificationCenterProvider>
+				<ToastProvider>
+					<RootNavigator />
+				</ToastProvider>
+			</NotificationCenterProvider>
 		</AuthProvider>
 	);
 }

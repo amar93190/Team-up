@@ -7,6 +7,7 @@ import { useAuth } from "@/context/supabase-provider";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
+import { useToast } from "@/components/ui/toast";
 
 type Conversation = {
   id: string;
@@ -18,6 +19,7 @@ type Conversation = {
 export default function ConversationListScreen() {
   const { session } = useAuth();
   const router = useRouter();
+  const toast = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
@@ -45,6 +47,30 @@ export default function ConversationListScreen() {
       load();
     }, [])
   );
+
+  useEffect(() => {
+    if (!session) return;
+    const channel = supabase
+      .channel("messages:all")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        async (payload) => {
+          try {
+            const convId = (payload.new as any)?.conversation_id;
+            if (!convId) return;
+            const conv = conversations.find((c) => c.id === convId);
+            const prefix = conv?.event?.sport?.emoji ? `${conv.event.sport.emoji} ` : "";
+            const title = conv?.event?.title ? `${prefix}${conv.event.title}` : "Nouveau message";
+            toast.show("Nouveau message", title);
+          } catch {}
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, conversations]);
 
   if (!session) {
     return (

@@ -18,6 +18,7 @@ export default function EventDetails() {
     const [mapError, setMapError] = useState(false);
     const [pending, setPending] = useState<any[]>([]);
     const [decisionLoading, setDecisionLoading] = useState<string | null>(null);
+    const [approvedCount, setApprovedCount] = useState<number>(0);
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
     const [registrationStatus, setRegistrationStatus] = useState<"none" | "pending" | "approved">("none");
 
@@ -68,6 +69,14 @@ export default function EventDetails() {
                 .order("created_at", { ascending: true });
             setPending(r.data ?? []);
         }
+        if (data?.id) {
+            const { count } = await supabase
+                .from("event_registrations")
+                .select("user_id", { count: "exact", head: true })
+                .eq("event_id", data.id)
+                .eq("status", "approved");
+            setApprovedCount(count ?? 0);
+        }
         if (session?.user.id) {
             const rr = await supabase
                 .from("event_registrations")
@@ -89,6 +98,25 @@ export default function EventDetails() {
         loadEvent();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, GEOAPIFY_API_KEY, session?.user.id]);
+
+    // Realtime: update counts and pending on registration changes
+    useEffect(() => {
+        if (!id) return;
+        const channel = supabase
+            .channel(`event_registrations:${id}`)
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "event_registrations", filter: `event_id=eq.${id}` },
+                () => {
+                    loadEvent();
+                },
+            )
+            .subscribe();
+        return () => {
+            supabase.removeChannel(channel);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]);
 
     const staticMapUrl = useMemo(() => {
         if (!mapLat || !mapLon || !GEOAPIFY_API_KEY) return null;
@@ -132,13 +160,13 @@ export default function EventDetails() {
                             />
                             {typeof event.capacity === "number" ? (
                                 <View className="absolute top-2 right-2 rounded-full bg-primary px-2 py-1">
-                                    <Text className="text-primary-foreground text-xs">{event.capacity} pers.</Text>
+                                    <Text className="text-primary-foreground text-xs">{approvedCount}/{event.capacity}</Text>
                                 </View>
                             ) : null}
                         </View>
                     ) : null}
                     {typeof event.capacity === "number" ? (
-                        <Text>Capacité: {event.capacity} personnes</Text>
+                        <Text>Places: {approvedCount}/{event.capacity}</Text>
                     ) : null}
                     {event.description ? <Text>{event.description}</Text> : null}
                     {event.owner_id !== session?.user.id ? (
@@ -150,6 +178,9 @@ export default function EventDetails() {
                                     : registrationStatus === "pending"
                                     ? "secondary"
                                     : "destructive"
+                            }
+                            disabled={
+                                registrationStatus === "none" && typeof event.capacity === "number" && approvedCount >= event.capacity
                             }
                             onPress={async () => {
                                 const userId = session?.user.id;
@@ -203,7 +234,7 @@ export default function EventDetails() {
                         >
                             <Text>
                                 {registrationStatus === "none"
-                                    ? "Je demande à participer"
+                                    ? (typeof event.capacity === "number" && approvedCount >= event.capacity ? "Complet" : "Je demande à participer")
                                     : registrationStatus === "pending"
                                     ? "En attente de validation"
                                     : "Se désinscrire"}
@@ -223,7 +254,7 @@ export default function EventDetails() {
                                 <View key={`${r.user_id}`} className="rounded-md border border-border bg-card p-3 gap-y-1">
                                     <Text>{r.user_id}</Text>
                                     <View className="flex-row gap-x-2">
-                                        <Button variant="default" disabled={decisionLoading === r.user_id} onPress={async () => {
+                                        <Button variant="default" disabled={decisionLoading === r.user_id || (typeof event.capacity === "number" && approvedCount >= event.capacity)} onPress={async () => {
                                             try {
                                                 setDecisionLoading(r.user_id);
                                                 const { error } = await supabase

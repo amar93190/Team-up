@@ -10,9 +10,14 @@ import { H1, Muted } from "@/components/ui/typography";
 import { useAuth } from "@/context/supabase-provider";
 import { getProfile, isProfileIncomplete } from "@/lib/profiles";
 import { supabase } from "@/config/supabase";
+import { useToast } from "@/components/ui/toast";
+import { useNotificationCenter } from "@/context/notification-center";
+import { registerForPushNotificationsAsync, savePushToken } from "@/lib/push";
 
 export default function Home() {
     const { session } = useAuth();
+    const toast = useToast();
+    const { unreadCount, add } = useNotificationCenter();
     const [checkedProfile, setCheckedProfile] = useState(false);
     const [events, setEvents] = useState<any[]>([]);
 
@@ -20,6 +25,11 @@ export default function Home() {
         (async () => {
             const userId = session?.user.id;
             if (!userId) return;
+            // Register for push token (best-effort)
+            try {
+                const token = await registerForPushNotificationsAsync();
+                if (token) await savePushToken(userId, token);
+            } catch {}
             try {
                 const profile = await getProfile(userId);
                 if (isProfileIncomplete(profile)) {
@@ -40,6 +50,29 @@ export default function Home() {
         })();
     }, [session?.user.id]);
 
+    // Toast when approval happens for current user
+    useEffect(() => {
+        const userId = session?.user.id;
+        if (!userId) return;
+        const channel = supabase
+            .channel(`approvals:${userId}`)
+            .on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "event_registrations", filter: `user_id=eq.${userId}` },
+                (payload) => {
+                    const newStatus = (payload.new as any)?.status;
+                    if (newStatus === "approved") {
+                        toast.show("Votre demande a été approuvée", "Inscription validée");
+                        add("Votre demande a été approuvée", "Inscription validée");
+                    }
+                },
+            )
+            .subscribe();
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [session?.user.id]);
+
     if (!checkedProfile) {
         return <View className="flex-1 bg-background" />;
     }
@@ -48,13 +81,27 @@ export default function Home() {
 			<View className="p-4 gap-y-4">
 				<View className="flex-row items-center justify-between">
 					<H1>Événements</H1>
-					<Pressable
-						accessibilityRole="button"
-						className="h-10 w-10 items-center justify-center rounded-full bg-primary"
-						onPress={() => router.push("/(protected)/chat")}
-					>
-						<Ionicons name="chatbubble-ellipses" size={18} color="white" />
-					</Pressable>
+					<View className="flex-row gap-x-2">
+						<Pressable
+							accessibilityRole="button"
+							className="h-10 w-10 items-center justify-center rounded-full bg-muted relative"
+							onPress={() => router.push("/(protected)/notifications")}
+						>
+							<Ionicons name="notifications" size={18} />
+							{unreadCount > 0 ? (
+								<View className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-primary items-center justify-center px-1">
+									<Text className="text-primary-foreground text-[10px]">{unreadCount}</Text>
+								</View>
+							) : null}
+						</Pressable>
+						<Pressable
+							accessibilityRole="button"
+							className="h-10 w-10 items-center justify-center rounded-full bg-primary"
+							onPress={() => router.push("/(protected)/chat")}
+						>
+							<Ionicons name="chatbubble-ellipses" size={18} color="white" />
+						</Pressable>
+					</View>
 				</View>
 				<View className="gap-y-3">
 					{events.map((e) => (
