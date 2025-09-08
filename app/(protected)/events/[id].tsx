@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from "expo-router";
-import { Image, ScrollView, View, Linking, Pressable } from "react-native";
+import { Image, ScrollView, View, Linking, Pressable, Alert } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 
 import { Text } from "@/components/ui/text";
@@ -17,6 +17,7 @@ export default function EventDetails() {
     const [mapLon, setMapLon] = useState<number | null>(null);
     const [mapError, setMapError] = useState(false);
     const [pending, setPending] = useState<any[]>([]);
+    const [decisionLoading, setDecisionLoading] = useState<string | null>(null);
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
     const [registrationStatus, setRegistrationStatus] = useState<"none" | "pending" | "approved">("none");
 
@@ -222,15 +223,39 @@ export default function EventDetails() {
                                 <View key={`${r.user_id}`} className="rounded-md border border-border bg-card p-3 gap-y-1">
                                     <Text>{r.user_id}</Text>
                                     <View className="flex-row gap-x-2">
-                                        <Button variant="default" onPress={async () => {
-                                            await supabase.from("event_registrations").update({ status: 'approved' }).eq("event_id", event.id).eq("user_id", r.user_id);
-                                            loadEvent();
+                                        <Button variant="default" disabled={decisionLoading === r.user_id} onPress={async () => {
+                                            try {
+                                                setDecisionLoading(r.user_id);
+                                                const { error } = await supabase
+                                                    .from("event_registrations")
+                                                    .update({ status: 'approved' })
+                                                    .eq("event_id", event.id)
+                                                    .eq("user_id", r.user_id);
+                                                if (error) {
+                                                    Alert.alert("Erreur", error.message);
+                                                }
+                                            } finally {
+                                                setDecisionLoading(null);
+                                                loadEvent();
+                                            }
                                         }}>
                                             <Text>Approuver</Text>
                                         </Button>
-                                        <Button variant="destructive" onPress={async () => {
-                                            await supabase.from("event_registrations").update({ status: 'rejected' }).eq("event_id", event.id).eq("user_id", r.user_id);
-                                            loadEvent();
+                                        <Button variant="destructive" disabled={decisionLoading === r.user_id} onPress={async () => {
+                                            try {
+                                                setDecisionLoading(r.user_id);
+                                                const { error } = await supabase
+                                                    .from("event_registrations")
+                                                    .update({ status: 'rejected' })
+                                                    .eq("event_id", event.id)
+                                                    .eq("user_id", r.user_id);
+                                                if (error) {
+                                                    Alert.alert("Erreur", error.message);
+                                                }
+                                            } finally {
+                                                setDecisionLoading(null);
+                                                loadEvent();
+                                            }
                                         }}>
                                             <Text>Refuser</Text>
                                         </Button>

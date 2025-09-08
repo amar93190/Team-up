@@ -260,10 +260,110 @@ create policy "events are viewable by all" on public.events
 
 create policy "owners can insert events" on public.events
   for insert with check (auth.uid() = owner_id);
+  
 
 create policy "owners can update their events" on public.events
   for update using (auth.uid() = owner_id);
 
 create policy "owners can delete their events" on public.events
   for delete using (auth.uid() = owner_id);
+```
+
+Messaging (optional): conversations and auto-group on approval
+
+```sql
+-- Conversations (group chat per event)
+create table if not exists public.conversations (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events(id) on delete cascade,
+  title text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.conversation_members (
+  conversation_id uuid references public.conversations(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  joined_at timestamptz default now(),
+  primary key (conversation_id, user_id)
+);
+
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid references public.conversations(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz default now()
+);
+
+alter table public.conversations enable row level security;
+alter table public.conversation_members enable row level security;
+alter table public.messages enable row level security;
+
+-- Policies: members can read/write their conversations/messages
+create policy "members can read conversations" on public.conversations
+  for select using (
+    exists (
+      select 1 from public.conversation_members m
+      where m.conversation_id = conversations.id and m.user_id = auth.uid()
+    )
+  );
+
+create policy "members can list/join" on public.conversation_members
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy "members can read messages" on public.messages
+  for select using (
+    exists (
+      select 1 from public.conversation_members m
+      where m.conversation_id = messages.conversation_id and m.user_id = auth.uid()
+    )
+  );
+
+create policy "members can send messages" on public.messages
+  for insert with check (
+    exists (
+      select 1 from public.conversation_members m
+      where m.conversation_id = messages.conversation_id and m.user_id = auth.uid()
+    )
+  );
+
+-- Helper: ensure a conversation exists for the event
+create or replace function public.ensure_event_conversation(p_event_id uuid)
+returns uuid as $$
+declare conv_id uuid;
+begin
+  select id into conv_id from public.conversations where event_id = p_event_id;
+  if conv_id is null then
+    insert into public.conversations(event_id, title)
+    values (p_event_id, 'Conversation de l\'événement')
+    returning id into conv_id;
+  end if;
+  return conv_id;
+end; $$ language plpgsql security definer;
+
+-- Trigger: on registration approved, create conversation and add organizer + participant
+create or replace function public.handle_registration_approved()
+returns trigger as $$
+declare conv uuid;
+declare org_id uuid;
+begin
+  if NEW.status = 'approved' and (TG_OP = 'INSERT' or NEW.status is distinct from OLD.status) then
+    select owner_id into org_id from public.events where id = NEW.event_id;
+    conv := public.ensure_event_conversation(NEW.event_id);
+    insert into public.conversation_members(conversation_id, user_id)
+      values (conv, NEW.user_id)
+      on conflict do nothing;
+    if org_id is not null then
+      insert into public.conversation_members(conversation_id, user_id)
+        values (conv, org_id)
+        on conflict do nothing;
+    end if;
+  end if;
+  return NEW;
+end; $$ language plpgsql;
+
+drop trigger if exists trg_registration_to_chat on public.event_registrations;
+create trigger trg_registration_to_chat
+after insert or update on public.event_registrations
+for each row execute function public.handle_registration_approved();
 ```
