@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ActivityIndicator, View } from "react-native";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import * as z from "zod";
 
 import { SafeAreaView } from "@/components/safe-area-view";
@@ -40,9 +41,25 @@ export default function SignIn() {
 	}
 
 	return (
-		<SafeAreaView className="flex-1 bg-background p-4" edges={["bottom"]}>
-			<View className="flex-1 gap-4 web:m-4">
-				<H1 className="self-start ">Sign In</H1>
+		<SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+			{/* Gradient wave header */}
+			<View className="mb-4" style={{ height: 180 }}>
+				<Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none">
+					<Defs>
+						<SvgLinearGradient id="signinGrad" x1="0" y1="0" x2="1" y2="1">
+							<Stop offset="0%" stopColor="#F59E0B" />
+							<Stop offset="33%" stopColor="#10B981" />
+							<Stop offset="66%" stopColor="#06B6D4" />
+							<Stop offset="100%" stopColor="#3B82F6" />
+						</SvgLinearGradient>
+					</Defs>
+					<Path d="M0 0 H400 V120 C320 180 150 110 0 160 Z" fill="url(#signinGrad)" />
+				</Svg>
+				<View className="absolute left-4 top-10">
+					<H1 className="text-white">Sign In</H1>
+				</View>
+			</View>
+			<View className="flex-1 gap-4 p-4 web:m-4">
 				<Form {...form}>
 					<View className="gap-4">
 						<FormField
@@ -82,7 +99,7 @@ export default function SignIn() {
 				variant="default"
 				onPress={form.handleSubmit(onSubmit)}
 				disabled={form.formState.isSubmitting}
-				className="web:m-4"
+				className="w-11/12 self-center web:m-4"
 			>
 				{form.formState.isSubmitting ? (
 					<ActivityIndicator size="small" />

@@ -13,18 +13,7 @@ export default function PublicLayout() {
 				name="sign-up"
 				options={{
 					presentation: "modal",
-					headerShown: true,
-					headerTitle: "Sign Up",
-					headerStyle: {
-						backgroundColor:
-							colorScheme === "dark"
-								? colors.dark.background
-								: colors.light.background,
-					},
-					headerTintColor:
-						colorScheme === "dark"
-							? colors.dark.foreground
-							: colors.light.foreground,
+					headerShown: false,
 					gestureEnabled: true,
 				}}
 			/>
@@ -32,18 +21,7 @@ export default function PublicLayout() {
 				name="sign-in"
 				options={{
 					presentation: "modal",
-					headerShown: true,
-					headerTitle: "Sign In",
-					headerStyle: {
-						backgroundColor:
-							colorScheme === "dark"
-								? colors.dark.background
-								: colors.light.background,
-					},
-					headerTintColor:
-						colorScheme === "dark"
-							? colors.dark.foreground
-							: colors.light.foreground,
+					headerShown: false,
 					gestureEnabled: true,
 				}}
 			/>
