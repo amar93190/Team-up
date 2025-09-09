@@ -18,7 +18,7 @@ export default function ProtectedLayout() {
 					gestureEnabled: true,
 				}}
 			/>
-			<Stack.Screen name="onboarding" options={{ headerShown: true, title: "Onboarding" }} />
+			<Stack.Screen name="onboarding" options={{ headerShown: false }} />
 		</Stack>
 	);
 }

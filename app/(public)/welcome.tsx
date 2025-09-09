@@ -24,7 +24,7 @@ export default function WelcomeScreen() {
 			/>
 			<SafeAreaView className="flex flex-1">
 				<View className="flex flex-1 items-center justify-center gap-y-4 p-4 web:m-4">
-					<Image source={logo} className="w-44 h-44" contentFit="contain" />
+					<Image source={logo} className="w-64 h-64" contentFit="contain" />
 				</View>
 				<View className="flex flex-col gap-y-4 p-4 web:m-4">
 					<Button

@@ -97,7 +97,7 @@ export default function Home() {
 						<Pressable
 							accessibilityRole="button"
 							className="h-10 w-10 items-center justify-center rounded-full bg-primary"
-							onPress={() => router.push("/(protected)/chat")}
+							onPress={() => router.push("/(protected)/chat/index")}
 						>
 							<Ionicons name="chatbubble-ellipses" size={18} color="white" />
 						</Pressable>
