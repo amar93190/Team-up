@@ -2,6 +2,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Image, ScrollView, View, Linking, Pressable, Alert } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
@@ -138,6 +139,20 @@ export default function EventDetails() {
                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16 }}
                 pointerEvents="none"
             />
+            {/* Decorative wave header */}
+            <View style={{ height: 160 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none">
+                    <Defs>
+                        <SvgLinearGradient id="eventGrad" x1="0" y1="0" x2="1" y2="1">
+                            <Stop offset="0%" stopColor="#F59E0B" />
+                            <Stop offset="33%" stopColor="#10B981" />
+                            <Stop offset="66%" stopColor="#06B6D4" />
+                            <Stop offset="100%" stopColor="#3B82F6" />
+                        </SvgLinearGradient>
+                    </Defs>
+                    <Path d="M0 0 H400 V120 C320 180 150 110 0 160 Z" fill="url(#eventGrad)" />
+                </Svg>
+            </View>
             <View className="gap-y-4" style={{ position: "relative", zIndex: 1 }}>
                 {event.cover_url ? (
                     <View style={{ position: "relative" }}>
