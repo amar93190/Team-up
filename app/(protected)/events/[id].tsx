@@ -1,6 +1,7 @@
 import { useLocalSearchParams, router } from "expo-router";
 import { Image, ScrollView, View, Linking, Pressable, Alert } from "react-native";
 import { useEffect, useMemo, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
@@ -129,8 +130,15 @@ export default function EventDetails() {
     if (!event) return <View className="flex-1 bg-background" />;
 
     return (
-        <ScrollView className="flex-1 bg-background">
-            <View className="gap-y-4">
+        <ScrollView className="flex-1 bg-background" style={{ position: "relative" }}>
+            <LinearGradient
+                colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16 }}
+                pointerEvents="none"
+            />
+            <View className="gap-y-4" style={{ position: "relative", zIndex: 1 }}>
                 {event.cover_url ? (
                     <View style={{ position: "relative" }}>
                         <Image source={{ uri: event.cover_url }} style={{ width: "100%", height: 220 }} />

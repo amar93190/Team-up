@@ -1,5 +1,7 @@
 import { Image, ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -58,20 +60,49 @@ export default function ProfileScreen() {
 	}, [userId]);
 
 	return (
-		<SafeAreaView className="flex-1 bg-background">
-			<ScrollView className="flex-1">
+		<SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+			{/* subtle full-page rainbow gradient */}
+			<LinearGradient
+				colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]}
+				start={{ x: 0, y: 0 }}
+				end={{ x: 1, y: 1 }}
+				style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16 }}
+				pointerEvents="none"
+			/>
+			<ScrollView className="flex-1" style={{ position: "relative", zIndex: 1 }}>
+				{/* Gradient header with deeper rounded bottom */}
+				<View style={{ height: 180, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", position: "relative", zIndex: 2, backgroundColor: "transparent" }}>
+					<Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none">
+						<Defs>
+							<SvgLinearGradient id="profileGrad" x1="0" y1="0" x2="1" y2="1">
+								<Stop offset="0%" stopColor="#F59E0B" />
+								<Stop offset="33%" stopColor="#10B981" />
+								<Stop offset="66%" stopColor="#06B6D4" />
+								<Stop offset="100%" stopColor="#3B82F6" />
+							</SvgLinearGradient>
+						</Defs>
+						{/* Rectangle top with very rounded bottom curve */}
+						<Path d="M0 0 H400 V110 C320 240 80 240 0 110 Z" fill="url(#profileGrad)" />
+					</Svg>
+				</View>
+
+				{/* Content under header (no colored container) */}
 				<View className="p-4 gap-y-6">
-					<H1 className="text-center">Profil</H1>
-					<View className="items-center gap-y-3">
-						<View className="h-28 w-28 rounded-full border border-border items-center justify-center overflow-hidden bg-muted">
+					<View className="items-center gap-y-3" style={{ marginTop: -96 }}>
+						<View className="h-40 w-40 rounded-full items-center justify-center overflow-hidden bg-muted" style={{ borderWidth: 4, borderColor: "#FFFFFF", position: "relative", zIndex: 3 }}>
 							{avatarUrl ? (
-								<Image source={{ uri: avatarUrl }} style={{ width: 112, height: 112, borderRadius: 56 }} />
+								<Image source={{ uri: avatarUrl }} style={{ width: 160, height: 160, borderRadius: 80 }} />
 							) : null}
 						</View>
 						<View className="items-center">
-							<Text className="text-xl">
-								{profile?.first_name ?? "-"} {profile?.last_name ?? ""}
-							</Text>
+							<View className="flex-row items-baseline gap-x-2">
+								<Text className="text-xl">
+									{profile?.first_name ?? "-"} {profile?.last_name ?? ""}
+								</Text>
+								{typeof profile?.age === "number" ? (
+									<Muted className="text-base">{profile.age} ans</Muted>
+								) : null}
+							</View>
 							{profile?.role ? (
 								<View className="mt-1 rounded-full bg-secondary px-3 py-1">
 									<Text className="text-secondary-foreground text-xs">
@@ -88,24 +119,26 @@ export default function ProfileScreen() {
 					</View>
 
 					<View className="rounded-lg border border-border bg-card p-4 gap-y-2">
-						<View className="flex-row justify-between">
-							<Muted>Âge</Muted>
-							<Text>{profile?.age ?? "-"}</Text>
-						</View>
 						<View className="gap-y-2">
 							<Muted>Sports</Muted>
 							<View className="flex-row flex-wrap gap-2">
 								{sports.length
-									? sports.map((s, idx) => (
-										<View key={`${s}-${idx}`} className="rounded-full border border-border bg-muted px-3 py-1">
-											<Text className="text-sm">{s}</Text>
-										</View>
-									))
+									? sports.map((s, idx) => {
+										const emoji = (s?.split?.(" ")?.[0] ?? "").trim();
+										return (
+											<View key={`${s}-${idx}`} className="h-40 w-40 rounded-full border border-border bg-muted items-center justify-center">
+												<Text className="text-5xl">{emoji}</Text>
+											</View>
+										);
+									})
 									: <Text>-</Text>}
 							</View>
 						</View>
 					</View>
+				</View>
 
+				{/* Events section */}
+				<View className="p-4 gap-y-6">
 					<View className="gap-y-2">
 						<Muted>Mes événements</Muted>
 						<View className="gap-y-3">
