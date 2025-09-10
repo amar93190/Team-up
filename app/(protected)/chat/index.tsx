@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, View, TextInput } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { supabase } from "@/config/supabase";
@@ -22,6 +22,7 @@ export default function ConversationListScreen() {
   const toast = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [query, setQuery] = useState<string>("");
 
   const load = async () => {
     if (!session) return;
@@ -80,36 +81,61 @@ export default function ConversationListScreen() {
     );
   }
 
+  const filtered = conversations.filter((c) => {
+    const prefix = c.event?.sport?.emoji ? `${c.event.sport.emoji} ` : "";
+    const title = c.event?.title ? `${prefix}${c.event.title}` : (c.title ?? "Conversation");
+    return title.toLowerCase().includes(query.toLowerCase());
+  });
+
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="px-4 pt-2 pb-4">
+      {/* Header + Search */}
+      <View className="px-4 pt-2 pb-3 gap-y-2">
         <H1>Messages</H1>
-        <Muted>Vos conversations d'événements</Muted>
+        <View className="flex-row items-center rounded-full bg-muted px-3 py-2">
+          <Text className="text-foreground/60">🔎</Text>
+          <TextInput
+            placeholder="Rechercher"
+            value={query}
+            onChangeText={setQuery}
+            style={{ flex: 1, marginLeft: 8 }}
+          />
+        </View>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator />
         </View>
-      ) : conversations.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center">Aucune conversation pour le moment.</Text>
+          <Text className="text-center">Aucune conversation.</Text>
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={filtered}
           keyExtractor={(item) => item.id}
           ItemSeparatorComponent={() => <View className="h-px bg-muted" />}
           renderItem={({ item }) => {
             const prefix = item.event?.sport?.emoji ? `${item.event.sport.emoji} ` : "";
             const displayTitle = item.event?.title ? `${prefix}${item.event.title}` : (item.title ?? "Conversation");
+            const time = new Date(item.created_at ?? Date.now()).toLocaleTimeString();
             return (
               <Pressable
-                className="px-4 py-3 active:opacity-80"
+                className="px-4 py-3 active:opacity-80 flex-row items-center gap-x-3"
                 onPress={() => router.push({ pathname: "/(protected)/chat/[id]", params: { id: item.id } })}
               >
-                <Text className="text-base font-semibold">{displayTitle}</Text>
-                <Muted>{new Date(item.created_at ?? Date.now()).toLocaleString()}</Muted>
+                {/* Avatar (emoji circle) */}
+                <View className="h-12 w-12 rounded-full bg-muted items-center justify-center">
+                  <Text className="text-lg">{item.event?.sport?.emoji ?? "💬"}</Text>
+                </View>
+                {/* Middle: title + snippet/time */}
+                <View className="flex-1">
+                  <Text className="font-semibold" numberOfLines={1}>{displayTitle}</Text>
+                  <Muted numberOfLines={1}>Dernier message • {time}</Muted>
+                </View>
+                {/* Right: time */}
+                <Muted className="ml-2 text-xs">{time}</Muted>
               </Pressable>
             );
           }}

@@ -20,6 +20,7 @@ export default function ProfileScreen() {
 	const [regionName, setRegionName] = useState<string | null>(null);
 	const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 	const [myEvents, setMyEvents] = useState<any[]>([]);
+	const [activeTab, setActiveTab] = useState<'events' | 'media' | 'favorites'>('events');
 	const router = useRouter();
 
 	useEffect(() => {
@@ -123,35 +124,70 @@ export default function ProfileScreen() {
 							<Muted>Sports</Muted>
 							<View className="flex-row flex-wrap gap-2">
 								{sports.length
-									? sports.map((s, idx) => {
-										const emoji = (s?.split?.(" ")?.[0] ?? "").trim();
-										return (
-											<View key={`${s}-${idx}`} className="h-40 w-40 rounded-full border border-border bg-muted items-center justify-center">
-												<Text className="text-5xl">{emoji}</Text>
-											</View>
-										);
-									})
+									? sports.map((s, idx) => (
+										<View key={`${s}-${idx}`} className="rounded-full border border-border bg-muted px-3 py-1">
+											<Text className="text-sm">{s}</Text>
+										</View>
+									))
 									: <Text>-</Text>}
 							</View>
 						</View>
 					</View>
-				</View>
 
-				{/* Events section */}
-				<View className="p-4 gap-y-6">
-					<View className="gap-y-2">
-						<Muted>Mes événements</Muted>
-						<View className="gap-y-3">
-							{myEvents.map((e) => (
-								<Pressable key={e.id} className="rounded-lg border border-border bg-card overflow-hidden" onPress={() => router.push(`/(protected)/events/${e.id}`)}>
-									{e.cover_url ? (
-										<Image source={{ uri: e.cover_url }} style={{ width: "100%", height: 120 }} />
-									) : null}
-									<View className="p-3 gap-y-1">
-										<Text>{e.title}</Text>
-									</View>
+					{/* TikTok-like segmented control + Tab content on white background */}
+					<View className="bg-white" style={{ marginHorizontal: -16 }}>
+						<View className="px-0">
+							<View className="flex-row bg-muted rounded-full p-1">
+								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='events' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('events')}>
+									<Text className={`${activeTab==='events' ? 'text-primary-foreground' : ''}`}>Événements</Text>
 								</Pressable>
-							))}
+								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='media' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('media')}>
+									<Text className={`${activeTab==='media' ? 'text-primary-foreground' : ''}`}>Médias</Text>
+								</Pressable>
+								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='favorites' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('favorites')}>
+									<Text className={`${activeTab==='favorites' ? 'text-primary-foreground' : ''}`}>Favoris</Text>
+								</Pressable>
+							</View>
+						</View>
+
+						{/* Tab content */}
+						<View className="p-4 gap-y-6">
+							{activeTab === 'events' ? (
+								<View className="gap-y-3">
+									<Muted>Mes événements</Muted>
+									<View className="flex-row flex-wrap justify-between gap-y-3">
+										{myEvents.map((e) => (
+											<Pressable
+												key={e.id}
+												style={{ width: '32%' }}
+												className="aspect-square rounded-md overflow-hidden bg-muted"
+												onPress={() => router.push(`/(protected)/events/${e.id}`)}
+											>
+												{e.cover_url ? (
+													<Image source={{ uri: e.cover_url }} style={{ width: '100%', height: '100%' }} />
+												) : (
+													<View className="w-full h-full bg-muted" />
+												)}
+											</Pressable>
+										))}
+									</View>
+								</View>
+							) : activeTab === 'media' ? (
+								<View className="gap-3">
+									<Muted>Médias</Muted>
+									<View className="flex-row flex-wrap justify-between gap-y-3">
+										{Array.from({ length: 9 }).map((_, i) => (
+											<View key={i} style={{ width: '32%' }} className="aspect-square bg-muted rounded-md" />
+										))}
+									</View>
+									<Muted>À venir…</Muted>
+								</View>
+							) : (
+								<View className="items-center py-8">
+									<Text>Pas de favoris pour le moment</Text>
+									<Muted>Ajoute des favoris bientôt</Muted>
+								</View>
+							)}
 						</View>
 					</View>
 

@@ -90,13 +90,18 @@ export default function Home() {
 
     return (
         <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-            <LinearGradient
-                colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16 }}
+            {/* Subtle full-page gradient background */}
+            <View
                 pointerEvents="none"
-            />
+                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16, zIndex: 0 }}
+           >
+                <LinearGradient
+                    colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ flex: 1 }}
+                />
+            </View>
 
             {/* Fixed actions bar */}
             <View style={{ position: "absolute", top: headerTop, right: 16, zIndex: 5 }} className="flex-row gap-x-2">
@@ -214,7 +219,7 @@ export default function Home() {
                     <View className="gap-y-3">
                         <Text className="text-base font-semibold">Tous les événements</Text>
                         {section3.map((e) => (
-                            <Pressable key={e.id} className="rounded-lg border border-border bg-card overflow-hidden" onPress={() => router.push(`/(protected)/events/${e.id}`)}>
+                            <Pressable key={e.id} className="rounded-none border border-border bg-card overflow-hidden" onPress={() => router.push(`/(protected)/events/${e.id}`)}>
                                 {e.cover_url ? (
                                     <View style={{ position: 'relative' }}>
                                         <Image source={{ uri: e.cover_url }} style={{ width: '100%', height: 200 }} />
