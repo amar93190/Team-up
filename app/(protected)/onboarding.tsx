@@ -40,6 +40,40 @@ export default function Onboarding() {
     const [selectedSports, setSelectedSports] = useState<string[]>([]);
     const [role, setRole] = useState<string>("");
 
+    // Animated scale map for sports chips (bounce feedback)
+    const chipScales = useRef<Record<string, Animated.Value>>({});
+    useEffect(() => {
+        sportsButtons.forEach((b) => {
+            if (!chipScales.current[b.value]) {
+                chipScales.current[b.value] = new Animated.Value(1);
+            }
+        });
+    }, [sportsButtons]);
+
+    function handleChipPressIn(value: string) {
+        const v = chipScales.current[value];
+        if (!v) return;
+        Animated.spring(v, {
+            toValue: 0.96,
+            useNativeDriver: true,
+            stiffness: 320,
+            damping: 22,
+            mass: 1,
+        }).start();
+    }
+
+    function handleChipPressOut(value: string) {
+        const v = chipScales.current[value];
+        if (!v) return;
+        Animated.spring(v, {
+            toValue: 1,
+            useNativeDriver: true,
+            stiffness: 320,
+            damping: 22,
+            mass: 1,
+        }).start();
+    }
+
     // Continuous wave support: store left/right Y for each step to ensure continuity
     const waveLeftY = useRef<number[]>([]);   // y at x=0 for each step
     const waveRightY = useRef<number[]>([]);  // y at x=400 for each step
@@ -104,6 +138,18 @@ export default function Onboarding() {
             return;
         }
         setSelectedSports(arr);
+    }
+
+    function toggleSport(value: string) {
+        setSelectedSports((prev) => {
+            const has = prev.includes(value);
+            if (has) return prev.filter((v) => v !== value);
+            if (prev.length >= 5) {
+                alert("Tu peux sélectionner au maximum 5 sports.");
+                return prev;
+            }
+            return [...prev, value];
+        });
     }
 
     async function pickImage() {
@@ -248,19 +294,33 @@ export default function Onboarding() {
 					</Animated.View>
 				) : (
 					<Animated.View className="flex-1 justify-end" style={{ minHeight: 540, ...(enterStyle as object) }}>
-						{/* Titre retiré à la demande */}
-						<Muted className="text-center">Veuillez saisir vos informations pour continuer</Muted>
-						<View className="gap-y-3 web:m-4 mt-3">
-							{/* Étape 1: Identité */}
-							{step === 1 ? (
-								<View className="gap-y-3">
-									<Input placeholder="Prénom" value={firstName} onChangeText={setFirstName} />
-									<Input placeholder="Nom" value={lastName} onChangeText={setLastName} />
-									<Input placeholder="Âge" keyboardType="number-pad" value={age} onChangeText={setAge} />
-								</View>
-							) : null}
+						{/* En-tête des étapes 1→5: Lottie (étape 1) ou rien */}
+						{step === 1 ? (
+							<View className="items-center mt-0" style={{ marginTop: -8 }}>
+								<LottieView
+									source={require("@/assets/w7zj7o1Hlu.json")}
+									autoPlay
+									loop
+									style={{ width: 140, height: 140, marginBottom: 2 }}
+								/>
+							</View>
+						) : null}
+                        {step === 2 ? (
+                            <View className="items-center mt-2">
+                                <Image source={require("@/assets/france.png")} style={{ width: 300, height: 300, resizeMode: "contain" }} />
+                            </View>
+                        ) : null}
+						<View className="gap-y-3 web:m-4" style={{ marginTop: step === 1 || step === 2 ? 6 : 12 }}>
+                            {/* Étape 1: Identité */}
+                            {step === 1 ? (
+                                <View className="gap-y-3">
+                                    <Input placeholder="Prénom" value={firstName} onChangeText={setFirstName} />
+                                    <Input placeholder="Nom" value={lastName} onChangeText={setLastName} />
+                                    <Input placeholder="Âge" keyboardType="number-pad" value={age} onChangeText={setAge} />
+                                </View>
+                            ) : null}
 
-							{/* Étape 2: Région */}
+                            {/* Étape 2: Région */}
 							{step === 2 ? (
 								<View className="gap-y-2">
 									<Muted>Région</Muted>
@@ -277,48 +337,138 @@ export default function Onboarding() {
 								</View>
 							) : null}
 
-							{/* Étape 3: Sports */}
-							{step === 3 ? (
-								<View className="gap-y-2">
-									<Muted>Sports pratiqués (multi‑choix)</Muted>
-									<ButtonMultiselect
-										layout={ButtonLayout.GRID}
-										multiselect
-										buttons={sportsButtons}
-										selectedButtons={selectedSports as any}
-										onButtonSelected={handleSportsSelected}
-									/>
-								</View>
-							) : null}
+                            {/* Étape 3: Sports */}
+                            {step === 3 ? <View style={{ height: 64 }} /> : null}
+                            {step === 3 ? (
+                                <View className="gap-y-3 items-center">
+                                    <Muted className="text-center">Sports pratiqués (multi‑choix)</Muted>
+                                    <View className="w-11/12 self-center flex-row flex-wrap justify-center gap-2">
+                                        {sportsButtons.map((btn) => {
+                                            const selected = selectedSports.includes(btn.value as any);
+                                            const colors = ["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"] as [string, string, string, string];
+                                            const scale = chipScales.current[btn.value] ?? new Animated.Value(1);
+                                            if (selected) {
+                                                return (
+                                                    <Animated.View key={btn.value} style={{ transform: [{ scale }] }}>
+                                                        <LinearGradient
+                                                            colors={colors}
+                                                            start={{ x: 0, y: 0 }}
+                                                            end={{ x: 1, y: 1 }}
+                                                            style={{ borderRadius: 9999 }}
+                                                        >
+                                                            <Pressable
+                                                                onPressIn={() => handleChipPressIn(btn.value)}
+                                                                onPressOut={() => handleChipPressOut(btn.value)}
+                                                                onPress={() => toggleSport(btn.value)}
+                                                                className="px-5 py-3 rounded-full"
+                                                            >
+                                                                <Text className="text-white text-base">{btn.label}</Text>
+                                                            </Pressable>
+                                                        </LinearGradient>
+                                                    </Animated.View>
+                                                );
+                                            }
+                                            return (
+                                                <Animated.View key={btn.value} style={{ transform: [{ scale }] }}>
+                                                    <LinearGradient
+                                                        colors={colors}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={{ borderRadius: 9999, padding: 1 }}
+                                                    >
+                                                        <Pressable
+                                                            onPressIn={() => handleChipPressIn(btn.value)}
+                                                            onPressOut={() => handleChipPressOut(btn.value)}
+                                                            onPress={() => toggleSport(btn.value)}
+                                                            className="px-5 py-3 rounded-full"
+                                                            style={{ backgroundColor: "white" }}
+                                                        >
+                                                            <Text className="text-foreground text-base">{btn.label}</Text>
+                                                        </Pressable>
+                                                    </LinearGradient>
+                                                </Animated.View>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            ) : null}
 
 							{/* Étape 4: Rôle */}
 							{step === 4 ? (
-								<View className="gap-y-2">
-									<Muted>Rôle</Muted>
-									<ButtonMultiselect
-										layout={ButtonLayout.FULL_WIDTH}
-										buttons={[
-											{ label: "Organisateur", value: "organizer" },
-											{ label: "Participant", value: "participant" },
-											{ label: "Les deux", value: "both" },
-										]}
-										selectedButtons={role as any}
-										onButtonSelected={(val: any) => setRole(val as string)}
-									/>
-								</View>
-							) : null}
+                                <View className="gap-y-3 items-center">
+                                    <Muted className="text-center">Rôle</Muted>
+                                    <View className="w-11/12 self-center flex-row flex-wrap justify-center gap-2">
+                                        {[
+                                            { label: "Organisateur", value: "organizer" },
+                                            { label: "Participant", value: "participant" },
+                                            { label: "Les deux", value: "both" },
+                                        ].map((btn) => {
+                                            const selected = role === btn.value;
+                                            const colors = ["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"] as [string, string, string, string];
+                                            if (selected) {
+                                                return (
+                                                    <LinearGradient
+                                                        key={btn.value}
+                                                        colors={colors}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={{ borderRadius: 9999 }}
+                                                    >
+                                                        <Pressable onPress={() => setRole(btn.value)} className="px-5 py-3 rounded-full">
+                                                            <Text className="text-white text-base">{btn.label}</Text>
+                                                        </Pressable>
+                                                    </LinearGradient>
+                                                );
+                                            }
+                                            return (
+                                                <LinearGradient
+                                                    key={btn.value}
+                                                    colors={colors}
+                                                    start={{ x: 0, y: 0 }}
+                                                    end={{ x: 1, y: 1 }}
+                                                    style={{ borderRadius: 9999, padding: 1 }}
+                                                >
+                                                    <Pressable onPress={() => setRole(btn.value)} className="px-5 py-3 rounded-full" style={{ backgroundColor: "white" }}>
+                                                        <Text className="text-foreground text-base">{btn.label}</Text>
+                                                    </Pressable>
+                                                </LinearGradient>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            ) : null}
 
-							{/* Étape 5: Photo */}
-							{step === 5 ? (
-								<View className="items-center gap-y-2">
-									{avatar ? (
-										<Image source={{ uri: avatar }} style={{ width: 96, height: 96, borderRadius: 48 }} />
-									) : null}
-									<Pressable className="rounded-md bg-secondary px-3 py-2" onPress={pickImage}>
-										<Text>{avatar ? "Changer la photo" : "Ajouter une photo"}</Text>
-									</Pressable>
-								</View>
-							) : null}
+                            {/* Étape 5: Photo */}
+                            {step === 5 ? (
+                                <View className="items-center gap-y-2">
+                                    {avatar ? (
+                                        <Image source={{ uri: avatar }} style={{ width: 200, height: 200, borderRadius: 100, marginBottom: 10 }} />
+                                    ) : (
+                                        <Pressable onPress={pickImage} className="items-center justify-center">
+                                            <Svg width={220} height={220} viewBox="0 0 220 220">
+                                                <Defs>
+                                                    <SvgLinearGradient id="avatarGrad" x1="0" y1="0" x2="1" y2="1">
+                                                        <Stop offset="0%" stopColor="#F59E0B" />
+                                                        <Stop offset="33%" stopColor="#10B981" />
+                                                        <Stop offset="66%" stopColor="#06B6D4" />
+                                                        <Stop offset="100%" stopColor="#3B82F6" />
+                                                    </SvgLinearGradient>
+                                                </Defs>
+                                                <Circle cx={110} cy={110} r={102} stroke="url(#avatarGrad)" strokeWidth={3} fill="none" strokeDasharray="6 6" />
+                                            </Svg>
+                                            <View style={{ position: "absolute" }}>
+                                                <Ionicons name="camera" size={34} color="#6b7280" />
+                                            </View>
+                                            <Text className="mt-2 text-muted-foreground">Ajouter une photo</Text>
+                                        </Pressable>
+                                    )}
+                                    {avatar ? (
+                                        <Pressable className="rounded-md bg-secondary px-3 py-2 mt-4" onPress={pickImage}>
+                                            <Text>Changer la photo</Text>
+                                        </Pressable>
+                                    ) : null}
+                                </View>
+                            ) : null}
 
 						</View>
 					</Animated.View>
