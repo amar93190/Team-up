@@ -17,7 +17,17 @@ type Message = {
 };
 
 export default function ConversationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams();
+  const rawId = (params?.id ?? "") as string | string[];
+  const idCandidate = Array.isArray(rawId) ? rawId[0] : rawId;
+  // Redirect away if someone navigated to /chat/index by mistake
+  useEffect(() => {
+    if (idCandidate === "index") {
+      router.replace("/(protected)/chat");
+    }
+  }, [idCandidate]);
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const conversationId = typeof idCandidate === "string" && uuidRegex.test(idCandidate) ? idCandidate : null;
   const { session } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState<boolean>(true);
@@ -28,11 +38,11 @@ export default function ConversationScreen() {
 
   useEffect(() => {
     const loadHeader = async () => {
-      if (!id) return;
+      if (!conversationId) return;
       const { data: conv } = await supabase
         .from("conversations")
         .select("id, title, event_id")
-        .eq("id", id)
+        .eq("id", conversationId)
         .maybeSingle();
       if (conv?.event_id) {
         const { data: ev } = await supabase
@@ -49,17 +59,17 @@ export default function ConversationScreen() {
       if (conv?.title) setHeaderTitle(conv.title);
     };
     loadHeader();
-  }, [id]);
+  }, [conversationId]);
 
   useEffect(() => {
-    if (!id || !session) return;
+    if (!conversationId || !session) return;
     let mounted = true;
     const load = async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("messages")
         .select("id, user_id, body, created_at")
-        .eq("conversation_id", id)
+        .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
       if (error) console.error("load messages error", error);
       if (mounted) setMessages(data ?? []);
@@ -69,10 +79,10 @@ export default function ConversationScreen() {
     load();
 
     const channel = supabase
-      .channel(`messages:${id}`)
+      .channel(`messages:${conversationId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${id}` },
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
         (payload) => {
           setMessages((prev) => [...prev, payload.new as unknown as Message]);
           setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
@@ -84,14 +94,14 @@ export default function ConversationScreen() {
       mounted = false;
       supabase.removeChannel(channel);
     };
-  }, [id, session?.user?.id]);
+  }, [conversationId, session?.user?.id]);
 
   const send = async () => {
     const trimmed = input.trim();
-    if (!trimmed || !session || !id) return;
+    if (!trimmed || !session || !conversationId) return;
     setInput("");
     const { error } = await supabase.from("messages").insert({
-      conversation_id: id,
+      conversation_id: conversationId,
       user_id: session.user.id,
       body: trimmed,
     });
@@ -104,6 +114,14 @@ export default function ConversationScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center p-6">
         <Muted>Veuillez vous connecter pour voir cette conversation.</Muted>
+      </SafeAreaView>
+    );
+  }
+
+  if (!conversationId) {
+    return (
+      <SafeAreaView className="flex-1 bg-background items-center justify-center p-6">
+        <Muted>Conversation introuvable.</Muted>
       </SafeAreaView>
     );
   }

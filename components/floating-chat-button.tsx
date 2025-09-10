@@ -21,7 +21,7 @@ export function FloatingChatButton({ className }: FloatingChatButtonProps) {
 			<Pressable
 				accessibilityRole="button"
 				className="h-11 w-11 items-center justify-center rounded-full bg-primary shadow-lg"
-				onPress={() => router.push("/(protected)/chat/index")}
+				onPress={() => router.push("/(protected)/chat")}
 			>
 				<Ionicons name="chatbubble-ellipses" size={20} color="white" />
 			</Pressable>
