@@ -42,6 +42,8 @@ export default function CreateEventScreen() {
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
     const [addressQuery, setAddressQuery] = useState<string>("");
     const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
+    const [loadingPlaces, setLoadingPlaces] = useState(false);
     useEffect(() => {
         let active = true;
         const q = addressQuery.trim();
@@ -64,6 +66,7 @@ export default function CreateEventScreen() {
     const [placeId, setPlaceId] = useState<string | null>(null);
     const [latitude, setLatitude] = useState<number | null>(null);
     const [longitude, setLongitude] = useState<number | null>(null);
+    const [isPublicPlace, setIsPublicPlace] = useState<boolean>(false);
 
 	const [sports, setSports] = useState<{ id: number; name: string; emoji?: string }[]>([]);
 	useEffect(() => {
@@ -156,6 +159,57 @@ export default function CreateEventScreen() {
 		);
 	}
 
+	function categoriesForSportName(name?: string): string {
+    const n = (name ?? "").toLowerCase();
+    // Geoapify categories joined by |
+    if (n.includes("foot")) return "sport.soccer|sport.stadium|sport.pitch|leisure.park";
+    if (n.includes("basket")) return "sport.basketball|sport.pitch|leisure.park";
+    if (n.includes("tennis")) return "sport.tennis";
+    if (n.includes("natation") || n.includes("swim")) return "sport.swimming_pool";
+    if (n.includes("run") || n.includes("course")) return "sport.track|leisure.park";
+    if (n.includes("fitness") || n.includes("gym")) return "sport.gym|leisure.fitness_station";
+    if (n.includes("yoga")) return "sport.gym";
+    if (n.includes("badminton")) return "sport.badminton|sport.pitch";
+    if (n.includes("volley")) return "sport.volleyball|sport.pitch";
+    if (n.includes("rugby")) return "sport.rugby|sport.pitch";
+    // Generic multi-sport fallback
+    return "sport.pitch|sport.stadium|sport.track|sport.tennis|sport.basketball|sport.swimming_pool|leisure.park|leisure.fitness_station";
+  }
+
+  const selectedSportName = useMemo(() => {
+    const s = sports.find((x) => x.id === sportId);
+    return s?.name;
+  }, [sports, sportId]);
+
+  // Fetch nearby public places when we have coordinates (from address selection or manual) or when sport changes
+  useEffect(() => {
+    if (!GEOAPIFY_API_KEY) return;
+    if (latitude == null || longitude == null) {
+      setNearbyPlaces([]);
+      return;
+    }
+    const cats = categoriesForSportName(selectedSportName);
+    const radius = 4000; // 4km
+    const url = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(cats)}&filter=circle:${longitude},${latitude},${radius}&bias=proximity:${longitude},${latitude}&limit=60&apiKey=${GEOAPIFY_API_KEY}`;
+    let active = true;
+    setLoadingPlaces(true);
+    (async () => {
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!active) return;
+        setNearbyPlaces(Array.isArray(json?.features) ? json.features : []);
+      } catch {
+        if (active) setNearbyPlaces([]);
+      } finally {
+        if (active) setLoadingPlaces(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [latitude, longitude, selectedSportName, GEOAPIFY_API_KEY]);
+
 	// Helpers: image picking, time combine, and publish logic
 	async function pickCover() {
 		const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -222,6 +276,7 @@ export default function CreateEventScreen() {
 				capacity: capacity ? Number(capacity) : null,
 				cover_url: null,
 				sport_id: sportId,
+				is_public: isPublicPlace ? true : null,
 			};
 			const { data, error } = await supabase.from('events').insert(insertPayload).select('id').maybeSingle();
 			if (error || !data?.id) {
@@ -371,6 +426,7 @@ export default function CreateEventScreen() {
 															const lon = p?.lon ?? item?.geometry?.coordinates?.[0];
 															setLatitude(typeof lat === 'number' ? lat : Number(lat));
 															setLongitude(typeof lon === 'number' ? lon : Number(lon));
+															setIsPublicPlace(false);
 															setSuggestions([]);
 														}}
 													>
@@ -382,7 +438,7 @@ export default function CreateEventScreen() {
 									) : null}
 									{addressText ? <Muted className="w-11/12 text-center">{addressText}</Muted> : null}
 									<View className="items-center mt-2">
-										{(latitude != null && longitude != null) ? (
+										{ (latitude != null && longitude != null) ? (
 											<View style={{ width: 320, height: 180, borderRadius: 12, overflow: 'hidden' }}>
 												{Platform.OS === 'web' ? (
 													(() => {
@@ -393,10 +449,7 @@ export default function CreateEventScreen() {
 													(() => {
 														const RNMaps: any = require('react-native-maps');
 														return (
-															<RNMaps.default
-																style={{ width: '100%', height: '100%' }}
-																initialRegion={{ latitude: Number(latitude), longitude: Number(longitude), latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-															>
+															<RNMaps.default style={{ width: '100%', height: '100%' }} initialRegion={{ latitude: Number(latitude), longitude: Number(longitude), latitudeDelta: 0.01, longitudeDelta: 0.01 }}>
 																<RNMaps.Marker coordinate={{ latitude: Number(latitude), longitude: Number(longitude) }} />
 															</RNMaps.default>
 														);
@@ -419,6 +472,44 @@ export default function CreateEventScreen() {
 												<Muted className="mt-2">Sélectionne une adresse pour voir la carte</Muted>
 											</View>
 										)}
+									</View>
+
+									{/* Nearby public sport places */}
+									<View className="w-11/12 self-center mt-3">
+										<Muted>Lieux publics à proximité</Muted>
+										{loadingPlaces ? <Muted>Recherche…</Muted> : null}
+										{!loadingPlaces && nearbyPlaces.length === 0 ? (
+											<Muted>Aucun lieu public trouvé dans le rayon.</Muted>
+										) : null}
+										<View className="mt-2 rounded-md border border-border bg-card">
+											<ScrollView style={{ maxHeight: 200 }}>
+												{nearbyPlaces.map((f: any, i: number) => {
+													const p = f?.properties ?? {};
+													const name = p.name ?? p.street ?? 'Lieu sans nom';
+													const addr = p.formatted ?? p.address_line1 ?? '';
+													const lat = p.lat ?? f?.geometry?.coordinates?.[1];
+													const lon = p.lon ?? f?.geometry?.coordinates?.[0];
+													return (
+														<Pressable key={String(p.place_id ?? i)} className="px-3 py-2 border-b border-border" onPress={() => {
+															setAddressText(addr);
+															setAddressQuery(addr);
+															setPlaceId(String(p.place_id ?? ''));
+															setLatitude(Number(lat));
+															setLongitude(Number(lon));
+															setIsPublicPlace(true);
+														}}>
+															<Text numberOfLines={1}>{name}</Text>
+															<Muted numberOfLines={1}>{addr}</Muted>
+														</Pressable>
+													);
+												})}
+											</ScrollView>
+										</View>
+										{isPublicPlace ? (
+											<View className="self-start mt-2 rounded-full bg-green-600 px-3 py-1">
+												<Text className="text-white text-xs">Lieu public sélectionné</Text>
+											</View>
+										) : null}
 									</View>
 								</View>
 							) : null}

@@ -15,6 +15,7 @@ import { supabase } from "@/config/supabase";
 import { useToast } from "@/components/ui/toast";
 import { useNotificationCenter } from "@/context/notification-center";
 import { registerForPushNotificationsAsync, savePushToken } from "@/lib/push";
+import { listFavoriteEventIds, toggleEventFavorite } from "@/lib/favorites";
 
 export default function Home() {
     const { session } = useAuth();
@@ -23,6 +24,7 @@ export default function Home() {
     const [checkedProfile, setCheckedProfile] = useState(false);
     const [events, setEvents] = useState<any[]>([]);
     const insets = useSafeAreaInsets();
+    const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
 
     useEffect(() => {
         (async () => {
@@ -45,6 +47,8 @@ export default function Home() {
                         .neq("owner_id", userId)
                         .order("start_at", { ascending: true });
                     setEvents(data ?? []);
+                    const favIds = await listFavoriteEventIds(userId);
+                    setFavoriteIds(favIds);
                 }
             } catch (_e) {
                 // On any read error (RLS/table missing), force onboarding
@@ -176,6 +180,23 @@ export default function Home() {
                                                     ) : (
                                                         <View className="h-36 bg-muted" />
                                                     )}
+                                                    <Pressable
+                                                        onPress={async () => {
+                                                            const userId = session?.user.id;
+                                                            if (!userId) return;
+                                                            const newState = await toggleEventFavorite(userId, String(e.id));
+                                                            setFavoriteIds((prev) => {
+                                                                const key = String(e.id);
+                                                                const has = prev.includes(key);
+                                                                if (newState && !has) return [...prev, key];
+                                                                if (!newState && has) return prev.filter((id) => id !== key);
+                                                                return prev;
+                                                            });
+                                                        }}
+                                                        className="absolute top-2 right-2 h-9 w-9 items-center justify-center rounded-full bg-white/90"
+                                                    >
+                                                        <Ionicons name={favoriteIds.includes(String(e.id)) ? "heart" : "heart-outline"} size={18} color={favoriteIds.includes(String(e.id)) ? "#EF4444" : "#111827"} />
+                                                    </Pressable>
                                                     <View className="p-2 gap-y-0.5">
                                                         <Text className="text-sm" numberOfLines={1}>{e.title}</Text>
                                                         <Muted className="text-xs">{e.address_text ?? ''}</Muted>
@@ -215,6 +236,23 @@ export default function Home() {
                                         ) : (
                                             <View className="bg-muted" style={{ width: '100%', height: 190 }} />
                                         )}
+                                        <Pressable
+                                            onPress={async () => {
+                                                const userId = session?.user.id;
+                                                if (!userId) return;
+                                                const newState = await toggleEventFavorite(userId, String(e.id));
+                                                setFavoriteIds((prev) => {
+                                                    const key = String(e.id);
+                                                    const has = prev.includes(key);
+                                                    if (newState && !has) return [...prev, key];
+                                                    if (!newState && has) return prev.filter((id) => id !== key);
+                                                    return prev;
+                                                });
+                                            }}
+                                            className="absolute top-2 right-2 h-9 w-9 items-center justify-center rounded-full bg-white/90"
+                                        >
+                                            <Ionicons name={favoriteIds.includes(String(e.id)) ? "heart" : "heart-outline"} size={18} color={favoriteIds.includes(String(e.id)) ? "#EF4444" : "#111827"} />
+                                        </Pressable>
                                         <View className="p-2 gap-y-0.5">
                                             <Text numberOfLines={1}>{e.title}</Text>
                                             <Muted className="text-xs" numberOfLines={1}>{e.address_text ?? ''}</Muted>
@@ -238,6 +276,23 @@ export default function Home() {
                                                 <Text className="text-primary-foreground text-xs">{e.capacity} pers.</Text>
                                             </View>
                                         ) : null}
+                                        <Pressable
+                                            onPress={async () => {
+                                                const userId = session?.user.id;
+                                                if (!userId) return;
+                                                const newState = await toggleEventFavorite(userId, String(e.id));
+                                                setFavoriteIds((prev) => {
+                                                    const key = String(e.id);
+                                                    const has = prev.includes(key);
+                                                    if (newState && !has) return [...prev, key];
+                                                    if (!newState && has) return prev.filter((id) => id !== key);
+                                                    return prev;
+                                                });
+                                            }}
+                                            className="absolute top-2 left-2 h-9 w-9 items-center justify-center rounded-full bg-white/90"
+                                        >
+                                            <Ionicons name={favoriteIds.includes(String(e.id)) ? "heart" : "heart-outline"} size={18} color={favoriteIds.includes(String(e.id)) ? "#EF4444" : "#111827"} />
+                                        </Pressable>
                                     </View>
                                 ) : (
                                     <View className="h-52 bg-muted" />

@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef } from "react";
-import { Image, View, ActivityIndicator, Pressable, ScrollView, Animated, Easing } from "react-native";
+import { Image, View, ActivityIndicator, Pressable, ScrollView, Animated, Easing, Modal, FlatList } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import LottieView from "lottie-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Circle, Path } from "react-native-svg";
-import { Dropdown } from "react-native-element-dropdown";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import { router } from "expo-router";
@@ -39,6 +38,7 @@ export default function Onboarding() {
     const [sportsButtons, setSportsButtons] = useState<{ label: string; value: string }[]>([]);
     const [selectedSports, setSelectedSports] = useState<string[]>([]);
     const [role, setRole] = useState<string>("");
+    const [isRegionPickerOpen, setIsRegionPickerOpen] = useState<boolean>(false);
 
     // Animated scale map for sports chips (bounce feedback)
     const chipScales = useRef<Record<string, Animated.Value>>({});
@@ -321,21 +321,52 @@ export default function Onboarding() {
                             ) : null}
 
                             {/* Étape 2: Région */}
-							{step === 2 ? (
-								<View className="gap-y-2">
-									<Muted>Région</Muted>
-									<Dropdown
-										style={{ height: 48, borderWidth: 1, borderRadius: 6, paddingHorizontal: 8 }}
-										containerStyle={{ borderRadius: 8 }}
-										data={regions.map((r) => ({ label: r.name, value: r.id }))}
-										labelField="label"
-										valueField="value"
-										placeholder="Choisir une région"
-										value={regionId as any}
-										onChange={(item: any) => setRegionId(item.value)}
-									/>
-								</View>
-							) : null}
+								{step === 2 ? (
+									<View className="gap-y-2">
+										<Muted>Région</Muted>
+										<Pressable
+											onPress={() => setIsRegionPickerOpen(true)}
+											style={{ height: 48, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, backgroundColor: 'white' }}
+											className="flex-row items-center justify-between"
+										>
+											<Text className="text-base">
+												{regionId ? (regions.find(r => r.id === regionId)?.name ?? "Choisir une région") : "Choisir une région"}
+											</Text>
+											<Ionicons name="chevron-down" size={20} color="#111827" />
+										</Pressable>
+
+										<Modal visible={isRegionPickerOpen} transparent animationType="fade" onRequestClose={() => setIsRegionPickerOpen(false)}>
+											<Pressable onPress={() => setIsRegionPickerOpen(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+												<View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '65%' }}>
+													<View className="p-4">
+														<Text className="text-lg font-semibold mb-2">Choisir une région</Text>
+													</View>
+													<FlatList
+														data={regions}
+														keyExtractor={(item) => String(item.id)}
+														ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#E5E7EB' }} />}
+														renderItem={({ item }) => (
+															<Pressable
+																onPress={() => {
+																	setRegionId(item.id);
+																	setIsRegionPickerOpen(false);
+																}}
+																className="px-4 py-3"
+															>
+																<Text className="text-base">{item.name}</Text>
+															</Pressable>
+														)}
+													/>
+													<View className="p-4">
+														<Pressable onPress={() => setIsRegionPickerOpen(false)} className="items-center rounded-full bg-black px-5 h-12 justify-center">
+															<Text className="text-white">Fermer</Text>
+														</Pressable>
+													</View>
+												</View>
+											</Pressable>
+										</Modal>
+									</View>
+								) : null}
 
                             {/* Étape 3: Sports */}
                             {step === 3 ? <View style={{ height: 64 }} /> : null}

@@ -1,16 +1,22 @@
 import { useLocalSearchParams, router } from "expo-router";
-import { Image, ScrollView, View, Pressable } from "react-native";
+import { Image, ScrollView, View, Pressable, Modal } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import { useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { supabase } from "@/config/supabase";
+import { listUserMedia, UserMedia } from "@/lib/media";
+import { Video, ResizeMode } from "expo-av";
 
 export default function PublicProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [profile, setProfile] = useState<any | null>(null);
+  const [media, setMedia] = useState<UserMedia[]>([]);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerItem, setViewerItem] = useState<UserMedia | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -21,6 +27,8 @@ export default function PublicProfile() {
         .eq("id", id)
         .maybeSingle();
       setProfile(data ?? null);
+      const mm = await listUserMedia(id);
+      setMedia(mm);
     })();
   }, [id]);
 
@@ -56,18 +64,43 @@ export default function PublicProfile() {
         {typeof profile?.age === 'number' ? <Muted>{profile.age} ans</Muted> : null}
       </View>
 
-      {/* Section Médias uniquement */}
+      {/* Section Médias */}
       <View className="p-4 gap-y-4">
         <Muted>Médias</Muted>
         <View className="flex-row flex-wrap justify-between gap-y-3">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <View key={i} style={{ width: '32%' }} className="aspect-square bg-muted rounded-md" />
+          {media.map((m) => (
+            <Pressable key={m.id} style={{ width: '32%' }} className="aspect-square bg-muted rounded-md overflow-hidden" onPress={() => { setViewerItem(m); setViewerOpen(true); }}>
+              {m.kind === 'image' ? (
+                <Image source={{ uri: m.url }} style={{ width: '100%', height: '100%' }} />
+              ) : (
+                <View className="w-full h-full items-center justify-center bg-black">
+                  <Ionicons name="play" size={28} color="white" />
+                </View>
+              )}
+            </Pressable>
           ))}
+          {media.length === 0 ? (
+            <View style={{ width: '100%' }} className="items-center py-6">
+              <Text>Aucun média pour le moment</Text>
+            </View>
+          ) : null}
         </View>
         <Pressable className="mt-6 rounded-md bg-secondary px-4 py-3" onPress={() => router.back()}>
           <Text>Fermer</Text>
         </Pressable>
       </View>
+      {/* Viewer modal */}
+      <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => { setViewerOpen(false); setViewerItem(null); }}>
+        <Pressable onPress={() => { setViewerOpen(false); setViewerItem(null); }} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: '92%', height: '72%' }}>
+            {viewerItem?.kind === 'image' ? (
+              <Image source={{ uri: viewerItem.url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            ) : viewerItem?.kind === 'video' ? (
+              <Video source={{ uri: viewerItem.url }} style={{ width: '100%', height: '100%' }} useNativeControls shouldPlay resizeMode={ResizeMode.CONTAIN} />
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }

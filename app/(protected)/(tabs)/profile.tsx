@@ -1,4 +1,4 @@
-import { Image, ScrollView, View, Pressable } from "react-native";
+import { Image, ScrollView, View, Pressable, Modal } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,8 +10,12 @@ import { H1, Muted } from "@/components/ui/typography";
 import { useAuth } from "@/context/supabase-provider";
 import { useEffect, useState } from "react";
 import { getProfile } from "@/lib/profiles";
+import { listFavoriteEvents } from "@/lib/favorites";
 import { supabase } from "@/config/supabase";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import { uploadUserMedia, listUserMedia, UserMedia } from "@/lib/media";
+import { Video, ResizeMode } from "expo-av";
 
 export default function ProfileScreen() {
 	const { signOut, session } = useAuth();
@@ -22,7 +26,24 @@ export default function ProfileScreen() {
 	const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 	const [myEvents, setMyEvents] = useState<any[]>([]);
 	const [activeTab, setActiveTab] = useState<'events' | 'media' | 'favorites'>('events');
+	const [favoriteEvents, setFavoriteEvents] = useState<any[]>([]);
 	const router = useRouter();
+	const [media, setMedia] = useState<UserMedia[]>([]);
+	const [viewerOpen, setViewerOpen] = useState(false);
+	const [viewerItem, setViewerItem] = useState<UserMedia | null>(null);
+
+	async function pickAndUpload() {
+		try {
+			const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+			if (status !== 'granted') return;
+			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, allowsEditing: false, quality: 0.85 });
+			if (res.canceled) return;
+			const asset = res.assets[0];
+			const mime = (asset as any).mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg');
+			const uploaded = await uploadUserMedia(userId, asset.uri, mime);
+			if (uploaded) setMedia((prev) => [uploaded, ...prev]);
+		} catch {}
+	}
 
 	useEffect(() => {
 		(async () => {
@@ -70,6 +91,10 @@ export default function ProfileScreen() {
 					.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 				setMyEvents([...upcoming, ...noDate, ...past]);
 			}
+			const favs = await listFavoriteEvents(userId);
+			setFavoriteEvents(favs);
+			const mm = await listUserMedia(userId);
+			setMedia(mm);
 		})();
 	}, [userId]);
 
@@ -172,64 +197,109 @@ export default function ProfileScreen() {
 								>
 									<Ionicons name="heart" size={20} color={activeTab==='favorites' ? '#111827' : '#6B7280'} />
 								</Pressable>
-							</View>
 						</View>
+					</View>
 
-						{/* Tab content */}
-						<View className="p-4 gap-y-6">
-							{activeTab === 'events' ? (
-								<View className="gap-y-3">
-									<Muted>Mes événements</Muted>
+					{/* Tab content */}
+					<View className="p-4 gap-y-6">
+						{activeTab === 'events' ? (
+							<View className="gap-y-3">
+								<Muted>Mes événements</Muted>
+								<View className="flex-row flex-wrap justify-between gap-y-4">
+									{myEvents.map((e) => {
+										const isPast = e?.start_at ? new Date(e.start_at).getTime() < Date.now() : false;
+										return (
+										<Pressable
+											key={e.id}
+											style={{ width: '32%' }}
+											className="rounded-md overflow-hidden bg-card border border-border"
+											onPress={() => router.push(`/(protected)/events/${e.id}`)}
+										>
+											<View className="w-full" style={{ height: 200 }}>
+												{e.cover_url ? (
+													<Image source={{ uri: e.cover_url }} style={{ width: '100%', height: '100%' }} />
+												) : (
+													<View className="w-full h-full bg-muted" />
+												)}
+												{isPast ? (
+													<View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+														<View style={{ width: '100%', backgroundColor: 'rgba(244,63,94,0.95)', paddingVertical: 10 }}>
+															<Text className="text-white text-center text-base font-semibold">TERMINÉ</Text>
+														</View>
+													</View>
+												) : null}
+											</View>
+											<View className="p-2">
+												<Text className="text-sm font-medium" numberOfLines={1}>{e.title}</Text>
+											</View>
+										</Pressable>
+									);
+									})}
+								</View>
+							</View>
+						) : activeTab === 'media' ? (
+							<View className="gap-3">
+								<View className="flex-row items-center justify-between">
+									<Muted>Médias</Muted>
+									<Pressable onPress={pickAndUpload} className="rounded-full bg-primary px-4 py-2">
+										<Text className="text-primary-foreground">Ajouter</Text>
+									</Pressable>
+								</View>
+								<View className="flex-row flex-wrap justify-between gap-y-3">
+									{media.map((m) => (
+										<Pressable key={m.id} style={{ width: '32%' }} className="aspect-square bg-muted rounded-md overflow-hidden" onPress={() => { setViewerItem(m); setViewerOpen(true); }}>
+											{m.kind === 'image' ? (
+												<Image source={{ uri: m.url }} style={{ width: '100%', height: '100%' }} />
+											) : (
+												<View className="w-full h-full items-center justify-center bg-black">
+													<Ionicons name="play" size={28} color="white" />
+												</View>
+											)}
+										</Pressable>
+									))}
+									{media.length === 0 ? (
+										<View style={{ width: '100%' }} className="items-center py-8">
+											<Text>Pas de média pour le moment</Text>
+											<Muted>Ajoute une photo ou une vidéo</Muted>
+										</View>
+									) : null}
+								</View>
+							</View>
+						) : (
+							<View className="gap-y-3">
+								<Muted>Favoris</Muted>
+								{favoriteEvents.length ? (
 									<View className="flex-row flex-wrap justify-between gap-y-4">
-										{myEvents.map((e) => {
-											const isPast = e?.start_at ? new Date(e.start_at).getTime() < Date.now() : false;
-											return (
+										{favoriteEvents.map((e) => (
 											<Pressable
 												key={e.id}
-												style={{ width: '32%' }}
+												style={{ width: '48%' }}
 												className="rounded-md overflow-hidden bg-card border border-border"
 												onPress={() => router.push(`/(protected)/events/${e.id}`)}
 											>
-												<View className="w-full" style={{ height: 200 }}>
+												<View className="w-full" style={{ height: 160 }}>
 													{e.cover_url ? (
 														<Image source={{ uri: e.cover_url }} style={{ width: '100%', height: '100%' }} />
 													) : (
 														<View className="w-full h-full bg-muted" />
 													)}
-													{isPast ? (
-														<View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-															<View style={{ width: '100%', backgroundColor: 'rgba(244,63,94,0.95)', paddingVertical: 10 }}>
-																<Text className="text-white text-center text-base font-semibold">TERMINÉ</Text>
-															</View>
-														</View>
-													) : null}
 												</View>
 												<View className="p-2">
 													<Text className="text-sm font-medium" numberOfLines={1}>{e.title}</Text>
 												</View>
 											</Pressable>
-										);
-										})}
-									</View>
-								</View>
-							) : activeTab === 'media' ? (
-								<View className="gap-3">
-									<Muted>Médias</Muted>
-									<View className="flex-row flex-wrap justify-between gap-y-3">
-										{Array.from({ length: 9 }).map((_, i) => (
-											<View key={i} style={{ width: '32%' }} className="aspect-square bg-muted rounded-md" />
 										))}
 									</View>
-									<Muted>À venir…</Muted>
-								</View>
-							) : (
-								<View className="items-center py-8">
-									<Text>Pas de favoris pour le moment</Text>
-									<Muted>Ajoute des favoris bientôt</Muted>
-								</View>
-							)}
-						</View>
+								) : (
+									<View className="items-center py-8">
+										<Text>Pas de favoris pour le moment</Text>
+										<Muted>Ajoute des favoris bientôt</Muted>
+									</View>
+								)}
+							</View>
+						)}
 					</View>
+				</View>
 
 					<Button className="m-4" variant="default" onPress={async () => {
 						await signOut();
@@ -238,8 +308,26 @@ export default function ProfileScreen() {
 					</Button>
 				</View>
 			</ScrollView>
-		</SafeAreaView>
+		{/* Media viewer modal */}
+		<Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => { setViewerOpen(false); setViewerItem(null); }}>
+			<Pressable onPress={() => { setViewerOpen(false); setViewerItem(null); }} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', alignItems: 'center', justifyContent: 'center' }}>
+				<View style={{ width: '92%', height: '72%' }}>
+					{viewerItem?.kind === 'image' ? (
+						<Image source={{ uri: viewerItem.url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+					) : viewerItem?.kind === 'video' ? (
+						<Video
+							source={{ uri: viewerItem.url }}
+							style={{ width: '100%', height: '100%' }}
+							useNativeControls
+							shouldPlay
+							resizeMode={ResizeMode.CONTAIN}
+						/>
+					) : null}
+				</View>
+			</Pressable>
+		</Modal>
+	</SafeAreaView>
 	);
 }
-
+ 
 

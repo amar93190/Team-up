@@ -2,6 +2,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Image, ScrollView, View, Linking, Pressable, Alert, Platform } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 
 import { Text } from "@/components/ui/text";
@@ -9,6 +10,7 @@ import { H1, Muted } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/config/supabase";
 import { useAuth } from "@/context/supabase-provider";
+import { isEventFavorited, toggleEventFavorite } from "@/lib/favorites";
 
 export default function EventDetails() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +26,7 @@ export default function EventDetails() {
     const [approvedCount, setApprovedCount] = useState<number>(0);
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
     const [registrationStatus, setRegistrationStatus] = useState<"none" | "pending" | "approved">("none");
+    const [isFavorite, setIsFavorite] = useState<boolean>(false);
 
     async function loadEvent() {
         const { data } = await supabase
@@ -110,6 +113,10 @@ export default function EventDetails() {
             } else {
                 setRegistrationStatus("none");
             }
+            if (data?.id) {
+                const fav = await isEventFavorited(session.user.id, String(data.id));
+                setIsFavorite(fav);
+            }
         }
     }
 
@@ -175,6 +182,17 @@ export default function EventDetails() {
                 {event.cover_url ? (
                     <View style={{ position: "relative" }}>
                         <Image source={{ uri: event.cover_url }} style={{ width: "100%", height: 220 }} />
+                        <Pressable
+                            onPress={async () => {
+                                const userId = session?.user.id;
+                                if (!userId || !event?.id) return;
+                                const newState = await toggleEventFavorite(userId, String(event.id));
+                                setIsFavorite(newState);
+                            }}
+                            className="absolute top-2 left-2 h-10 w-10 items-center justify-center rounded-full bg-white/90"
+                        >
+                            <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={20} color={isFavorite ? "#EF4444" : "#111827"} />
+                        </Pressable>
                         {typeof event.capacity === "number" ? (
                             <View className="absolute top-2 right-2 rounded-full bg-primary px-2 py-1">
                                 <Text className="text-primary-foreground text-xs">{event.capacity} pers.</Text>
