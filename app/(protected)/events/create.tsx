@@ -1,312 +1,503 @@
-import { useEffect, useState } from "react";
-import { Pressable, View, Image, ScrollView } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { View, Animated, Easing, Pressable, Image, ScrollView, FlatList, Alert, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path, Rect } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
+import { Input } from "@/components/ui/input";
+import { listSports } from "@/lib/sports";
 import { supabase } from "@/config/supabase";
 import { useAuth } from "@/context/supabase-provider";
-// Simple formatters for UI labels
-import DateTimePicker from "@react-native-community/datetimepicker";
-import * as ImagePicker from "expo-image-picker";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
-import ButtonMultiselect, { ButtonLayout } from "react-native-button-multiselect";
-import { listSports } from "@/lib/sports";
+import { router } from "expo-router";
 
-function formatDateLabel(d: Date | null) {
-  if (!d) return "Choisir la date";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function formatTimeLabel(d: Date | null) {
-  if (!d) return "Choisir l'heure";
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${min}`;
-}
-
-export default function CreateEvent() {
+export default function CreateEventScreen() {
+	const insets = useSafeAreaInsets();
     const { session } = useAuth();
-    const userId = session?.user.id as string;
-    const [title, setTitle] = useState("");
-    
-    const [addressQuery, setAddressQuery] = useState("");
-    const [addressText, setAddressText] = useState<string | null>(null);
-    const [placeId, setPlaceId] = useState<string | null>(null);
-    const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-    const [suggestions, setSuggestions] = useState<Array<{ description: string; place_id: string; lat: number; lon: number }>>([]);
-    const [description, setDescription] = useState("");
-    const [startAt, setStartAt] = useState<Date | null>(null);
-    const [showDate, setShowDate] = useState(false);
-    const [showTime, setShowTime] = useState(false);
-    const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced" | "all">("all");
-    const [capacity, setCapacity] = useState<number>(1);
-    const [submitting, setSubmitting] = useState(false);
-    const [coverUri, setCoverUri] = useState<string | null>(null);
+    const userId = session?.user.id as string | undefined;
+
+	// Local-only form state (no backend action here)
+	const [title, setTitle] = useState("");
+	const [sportId, setSportId] = useState<number | null>(null);
+	const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced" | "all">("all");
+	const [dateValue, setDateValue] = useState<Date | null>(null);
+	const [timeValue, setTimeValue] = useState<Date | null>(null);
+	const [addressText, setAddressText] = useState("");
+	const [capacity, setCapacity] = useState<string>("");
+	const [description, setDescription] = useState("");
+	const [coverUri, setCoverUri] = useState<string | null>(null);
     const [coverMime, setCoverMime] = useState<string | null>(null);
     const [coverExt, setCoverExt] = useState<string | null>(null);
-    const [sportsButtons, setSportsButtons] = useState<{ label: string; value: string }[]>([]);
-    const [selectedSport, setSelectedSport] = useState<string>("");
+    const [publishing, setPublishing] = useState<boolean>(false);
+    const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+    const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
 
+    // Address autocomplete (Geoapify)
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
-
+    const [addressQuery, setAddressQuery] = useState<string>("");
+    const [suggestions, setSuggestions] = useState<any[]>([]);
     useEffect(() => {
-        if (!GEOAPIFY_API_KEY) return;
+        let active = true;
         const q = addressQuery.trim();
-        if (q.length < 3) {
+        if (!GEOAPIFY_API_KEY || q.length < 3) {
             setSuggestions([]);
             return;
         }
-        const t = setTimeout(async () => {
-            try {
-                const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(q)}&limit=6&filter=countrycode:fr&lang=fr&apiKey=${GEOAPIFY_API_KEY}`;
-                const res = await fetch(url);
-                const json = await res.json();
-                const feats = json?.features ?? [];
-                setSuggestions(
-                    feats.map((f: any) => ({
-                        description: f.properties?.formatted ?? f.properties?.address_line1 ?? "",
-                        place_id: String(f.properties?.place_id ?? f.properties?.datasource?.raw?.place_id ?? ""),
-                        lat: f.properties?.lat ?? f.geometry?.coordinates?.[1],
-                        lon: f.properties?.lon ?? f.geometry?.coordinates?.[0],
-                    })),
-                );
-            } catch (e) {
-                // eslint-disable-next-line no-console
-                console.error("autocomplete error", e);
-            }
-        }, 300);
-        return () => clearTimeout(t);
-    }, [addressQuery, GEOAPIFY_API_KEY]);
-
-    useEffect(() => {
+        const controller = new AbortController();
         (async () => {
             try {
-                const ss = await listSports();
-                setSportsButtons(ss.map((s) => ({ label: `${s.emoji ?? ''} ${s.name}`.trim(), value: String(s.id) })));
-            } catch (e) {
-                // eslint-disable-next-line no-console
-                console.error("sports load error", e);
-            }
+                const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(q)}&limit=6&lang=fr&apiKey=${GEOAPIFY_API_KEY}`;
+                const res = await fetch(url, { signal: controller.signal });
+                const json = await res.json();
+                if (!active) return;
+                setSuggestions(json?.features ?? []);
+            } catch { /* ignore */ }
         })();
-    }, []);
+        return () => { active = false; controller.abort(); };
+    }, [addressQuery, GEOAPIFY_API_KEY]);
+    const [placeId, setPlaceId] = useState<string | null>(null);
+    const [latitude, setLatitude] = useState<number | null>(null);
+    const [longitude, setLongitude] = useState<number | null>(null);
 
-    async function selectPlace(p: { description: string; place_id: string; lat: number; lon: number }) {
-        setAddressText(p.description);
-        setPlaceId(p.place_id);
-        setCoords({ lat: p.lat, lng: p.lon });
-        setSuggestions([]);
-        setAddressQuery(p.description);
-    }
+	const [sports, setSports] = useState<{ id: number; name: string; emoji?: string }[]>([]);
+	useEffect(() => {
+		(async () => {
+			try {
+				const ss = await listSports();
+				setSports(ss);
+			} catch {
+				// ignore if fetch fails; this is a UI-only screen
+			}
+		})();
+	}, []);
 
-    async function handleCreate() {
-        if (!userId) return;
-        setSubmitting(true);
-        try {
-            const inserted = await supabase
-                .from("events")
-                .insert({
-                    owner_id: userId,
-                    title,
-                    description,
-                    start_at: startAt ? startAt.toISOString() : null,
-                    level,
-                    capacity,
-                    sport_id: selectedSport ? Number(selectedSport) : null,
-                    address_text: addressText,
-                    place_id: placeId,
-                    latitude: coords?.lat ?? null,
-                    longitude: coords?.lng ?? null,
-                })
-                .select("id")
-                .single();
-            if (inserted.error) throw inserted.error;
-            const eventId = inserted.data.id as string;
+	// Steps: 0 Intro; 1 Base (titre+description); 2 Sport/Niveau; 3 Date/heure; 4 Lieu; 5 Détails; 6 Visuel & résumé
+	const [step, setStep] = useState<number>(0);
+	const totalSteps = 6;
+	function handleNext() { setStep((s) => Math.min(totalSteps, s + 1)); }
+	function handleBack() { setStep((s) => Math.max(0, s - 1)); }
 
-            if (coverUri) {
-                try {
-                    let uploadUri = coverUri;
-                    let uploadMime = coverMime ?? "image/jpeg";
-                    let ext = coverExt ?? (uploadMime.includes("png") ? "png" : uploadMime.includes("jpeg") ? "jpg" : "jpg");
-                    if ((uploadMime && uploadMime.includes("heic")) || (ext && ext.includes("heic"))) {
-                        const m = await manipulateAsync(coverUri, [], { compress: 0.9, format: SaveFormat.JPEG });
-                        uploadUri = m.uri;
-                        uploadMime = "image/jpeg";
-                        ext = "jpg";
-                    }
-                    const path = `event-covers/${eventId}.${ext}`;
-                    const file = { uri: uploadUri, name: `cover.${ext}`, type: uploadMime } as any;
-                    const { error: upErr } = await supabase.storage.from("public").upload(path, file, { contentType: uploadMime, upsert: true });
-                    if (!upErr) {
-                        const { data: pub } = supabase.storage.from("public").getPublicUrl(path);
-                        await supabase.from("events").update({ cover_url: pub.publicUrl }).eq("id", eventId);
-                    }
-                } catch (e) {
-                    // eslint-disable-next-line no-console
-                    console.error("cover upload failed", e);
-                }
-            }
-            router.back();
-        } catch (e: any) {
-            // eslint-disable-next-line no-alert
-            alert(e?.message ?? "Erreur lors de la création");
-        } finally {
-            setSubmitting(false);
-        }
-    }
+	// Slide-fade transitions
+	const transition = useRef(new Animated.Value(1)).current;
+	useEffect(() => {
+		transition.setValue(0);
+		Animated.timing(transition, {
+			toValue: 1,
+			duration: 280,
+			easing: Easing.out(Easing.cubic),
+			useNativeDriver: true,
+		}).start();
+	}, [step]);
+	const enterStyle = {
+		opacity: transition,
+		transform: [
+			{ translateX: transition.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) },
+			{ translateY: transition.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
+		],
+	} as any;
 
-    return (
-        <ScrollView className="flex-1 bg-background">
-            <View className="p-4 gap-y-4">
-            <H1 className="text-center">Créer un événement</H1>
-            <View className="gap-y-3">
-                <Input placeholder="Titre" value={title} onChangeText={setTitle} />
-                <Textarea placeholder="Description" value={description} onChangeText={setDescription} />
-                <View className="gap-y-2 items-center">
-                    {coverUri ? (
-                        <Image source={{ uri: coverUri }} style={{ width: "100%", height: 160, borderRadius: 8 }} />
-                    ) : null}
-                    <Button variant="secondary" onPress={async () => {
-                        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                        if (perm.status !== "granted") return;
-                        const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
-                        if (!res.canceled) {
-                            const asset = res.assets[0];
-                            setCoverUri(asset.uri);
-                            setCoverMime((asset as any).mimeType ?? null);
-                            const name = (asset as any).fileName as string | undefined;
-                            const ext = name?.split(".").pop()?.toLowerCase() ?? asset.uri.split(".").pop()?.toLowerCase() ?? null;
-                            setCoverExt(ext);
-                        }
-                    }}>
-                        <Text>{coverUri ? "Changer l'image de garde" : "Ajouter une image de garde"}</Text>
-                    </Button>
-                </View>
-                <View className="flex-row gap-x-2 items-center">
-                    <Button className="flex-1" variant="secondary" onPress={() => setShowDate(true)}>
-                        <Text>{formatDateLabel(startAt)}</Text>
-                    </Button>
-                    <Button className="flex-1" variant="secondary" onPress={() => setShowTime(true)}>
-                        <Text>{formatTimeLabel(startAt)}</Text>
-                    </Button>
-                </View>
-                {showDate && (
-                    <DateTimePicker
-                        value={startAt ?? new Date()}
-                        mode="date"
-                        onChange={(_, d) => {
-                            setShowDate(false);
-                            if (d) {
-                                const base = startAt ?? new Date();
-                                const merged = new Date(d);
-                                merged.setHours(base.getHours(), base.getMinutes(), 0, 0);
-                                setStartAt(merged);
-                            }
-                        }}
-                    />
-                )}
-                {showTime && (
-                    <DateTimePicker
-                        value={startAt ?? new Date()}
-                        mode="time"
-                        is24Hour
-                        onChange={(_, d) => {
-                            setShowTime(false);
-                            if (d) {
-                                const base = startAt ?? new Date();
-                                base.setHours(d.getHours(), d.getMinutes(), 0, 0);
-                                setStartAt(new Date(base));
-                            }
-                        }}
-                    />
-                )}
-                <View className="gap-y-2">
-                    <Muted>Niveau requis</Muted>
-                    <View className="flex-row flex-wrap gap-2">
-                        {[
-                            { label: "Débutant", value: "beginner" },
-                            { label: "Intermédiaire", value: "intermediate" },
-                            { label: "Confirmé", value: "advanced" },
-                            { label: "Tous niveaux", value: "all" },
-                        ].map((opt) => (
-                            <Pressable key={opt.value} className={`rounded-full border px-3 py-1 ${level === (opt.value as any) ? "border-primary" : "border-border"}`} onPress={() => setLevel(opt.value as any)}>
-                                <Text>{opt.label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
-                <View className="gap-y-2">
-                    <Muted>Sport</Muted>
-                    <ButtonMultiselect
-                        layout={ButtonLayout.GRID}
-                        buttons={sportsButtons}
-                        selectedButtons={selectedSport as any}
-                        onButtonSelected={(val: any) => setSelectedSport(val as string)}
-                    />
-                </View>
-                <View className="gap-y-2">
-                    <Muted>Nombre de personnes</Muted>
-                    <View className="flex-row items-center justify-between">
-                        {Array.from({ length: 8 }).map((_, idx) => {
-                            const value = idx + 1;
-                            const selected = value <= capacity;
-                            return (
-                                <Pressable
-                                    key={value}
-                                    onPress={() => setCapacity(value)}
-                                    accessibilityRole="button"
-                                >
-                                    <View
-                                        style={{
-                                            width: 38,
-                                            height: 38,
-                                            borderRadius: 19,
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            backgroundColor: selected ? "#111827" : "#E5E7EB",
-                                        }}
-                                    >
-                                        <MaterialCommunityIcons
-                                            name="account"
-                                            size={22}
-                                            color={selected ? "#FFFFFF" : "#6B7280"}
-                                        />
-                                    </View>
-                                </Pressable>
-                            );
-                        })}
-                    </View>
-                </View>
-                <View className="gap-y-2">
-                    <Input
-                        placeholder="Adresse"
-                        value={addressQuery}
-                        onChangeText={setAddressQuery}
-                    />
-                    {suggestions.length > 0 ? (
-                        <View className="rounded-md border border-border bg-card">
-                            {suggestions.map((s) => (
-                                <Pressable key={s.place_id} className="px-3 py-2 border-b border-border last:border-b-0" onPress={() => selectPlace(s)}>
-                                    <Text>{s.description}</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                    ) : null}
-                </View>
-            </View>
-            <Button variant="default" onPress={handleCreate} disabled={submitting}>
-                <Text>Enregistrer</Text>
-            </Button>
-            <Muted className="text-center">(Formulaire minimal, à enrichir plus tard)</Muted>
-            </View>
-        </ScrollView>
-    );
+	// Reusable bottom wave (same shape as sign-up/onboarding)
+	function BottomWave() {
+		return (
+			<Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+				<Defs>
+					<SvgLinearGradient id="eventCreateGrad" x1="0" y1="0" x2="1" y2="1">
+						<Stop offset="0%" stopColor="#F59E0B" />
+						<Stop offset="33%" stopColor="#10B981" />
+						<Stop offset="66%" stopColor="#06B6D4" />
+						<Stop offset="100%" stopColor="#3B82F6" />
+					</SvgLinearGradient>
+				</Defs>
+				<Path d="M0 0 H400 V120 C320 180 150 110 0 160 Z" fill="url(#eventCreateGrad)" transform="translate(0,200) scale(1,-1)" />
+			</Svg>
+		);
+	}
+
+	// Simple gradient chip for sports
+	function SportChip({ id, label, selected }: { id: number; label: string; selected: boolean }) {
+		const colors = ["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"] as [string, string, string, string];
+		return selected ? (
+			<LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 9999 }}>
+				<Pressable className="px-5 py-3 rounded-full" onPress={() => setSportId(null)}>
+					<Text className="text-white text-base">{label}</Text>
+				</Pressable>
+			</LinearGradient>
+		) : (
+			<LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 9999, padding: 1 }}>
+				<Pressable className="px-5 py-3 rounded-full" style={{ backgroundColor: "white" }} onPress={() => setSportId(id)}>
+					<Text className="text-foreground text-base">{label}</Text>
+				</Pressable>
+			</LinearGradient>
+		);
+	}
+
+	// Level segmented (simple underline variant)
+	function LevelTabs() {
+		const items: { key: any; label: string }[] = [
+			{ key: "beginner", label: "Débutant" },
+			{ key: "intermediate", label: "Intermédiaire" },
+			{ key: "advanced", label: "Avancé" },
+			{ key: "all", label: "Tous" },
+		];
+		return (
+			<View className="flex-row w-11/12 self-center">
+				{items.map((it) => (
+					<Pressable key={it.key} className="flex-1 items-center py-2" onPress={() => setLevel(it.key)} style={{ borderBottomWidth: 2, borderBottomColor: level === it.key ? "#000" : "transparent" }}>
+						<Text className="text-sm" style={{ color: level === it.key ? "#111827" : "#6B7280" }}>{it.label}</Text>
+					</Pressable>
+				))}
+			</View>
+		);
+	}
+
+	// Helpers: image picking, time combine, and publish logic
+	async function pickCover() {
+		const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+		if (status !== 'granted') return;
+		const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.9 });
+		if (result.canceled) return;
+		const asset: any = result.assets?.[0];
+		if (!asset) return;
+		setCoverUri(asset.uri);
+		const mime = asset.mimeType ?? 'image/jpeg';
+		setCoverMime(mime);
+		const name = asset.fileName as string | undefined;
+		const ext = name?.split('.').pop()?.toLowerCase() ?? asset.uri.split('.').pop()?.toLowerCase() ?? (mime.includes('png') ? 'png' : 'jpg');
+		setCoverExt(ext);
+	}
+
+	function combineDateTime(d: Date | null, t: Date | null): string | null {
+		if (!d || !t) return null;
+		const combined = new Date(d);
+		combined.setHours(t.getHours());
+		combined.setMinutes(t.getMinutes());
+		combined.setSeconds(0);
+		combined.setMilliseconds(0);
+		return combined.toISOString();
+	}
+
+	async function handlePublish() {
+		if (!userId) {
+			Alert.alert('Non connecté', "Tu dois être connecté pour publier.");
+			return;
+		}
+		if (!title.trim()) {
+			Alert.alert('Titre requis', 'Ajoute un titre.');
+			return;
+		}
+		if (!sportId) {
+			Alert.alert('Sport requis', 'Choisis un sport.');
+			return;
+		}
+		setPublishing(true);
+		try {
+			const start_at = combineDateTime(dateValue, timeValue);
+			const insertPayload: any = {
+				owner_id: userId,
+				title: title.trim(),
+				description: description.trim() || null,
+				level,
+				start_at,
+				address_text: addressText || null,
+				place_id: placeId,
+				latitude,
+				longitude,
+				capacity: capacity ? Number(capacity) : null,
+				cover_url: null,
+				sport_id: sportId,
+			};
+			const { data, error } = await supabase.from('events').insert(insertPayload).select('id').maybeSingle();
+			if (error || !data?.id) {
+				Alert.alert('Erreur', error?.message ?? "Impossible de publier l'événement.");
+				setPublishing(false);
+				return;
+			}
+			const eventId = data.id as string;
+			if (coverUri) {
+				try {
+					// Convert HEIC if needed
+					let uploadUri = coverUri;
+					let uploadMime = coverMime ?? 'image/jpeg';
+					let ext = coverExt ?? (uploadMime.includes('png') ? 'png' : 'jpg');
+					if ((uploadMime && uploadMime.includes('heic')) || (ext && ext.includes('heic'))) {
+						const manipulated = await manipulateAsync(coverUri, [], { compress: 0.9, format: SaveFormat.JPEG });
+						uploadUri = manipulated.uri;
+						uploadMime = 'image/jpeg';
+						ext = 'jpg';
+					}
+					const filePath = `event-covers/${eventId}.${ext}`;
+					const file: any = { uri: uploadUri, name: `cover.${ext}`, type: uploadMime };
+					const { error: upErr } = await supabase.storage.from('public').upload(filePath, file, { contentType: uploadMime, upsert: true });
+					if (!upErr) {
+						const { data: pub } = supabase.storage.from('public').getPublicUrl(filePath);
+						const publicUrl = pub?.publicUrl ?? null;
+						if (publicUrl) await supabase.from('events').update({ cover_url: publicUrl }).eq('id', eventId);
+					}
+				} catch (e) { /* ignore upload error */ }
+			}
+			router.replace(`/(protected)/events/${eventId}`);
+		} finally {
+			setPublishing(false);
+		}
+	}
+
+	return (
+		<View className="flex-1 bg-background">
+			{/* subtle page background gradient */}
+			<View pointerEvents="none" style={{ position: "absolute", inset: 0, opacity: 0.16 }}>
+				<LinearGradient colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }} />
+			</View>
+
+			<ScrollView className="flex-1" contentContainerClassName={step === 0 ? "pb-0" : "pb-28"}>
+				<View className="p-4 gap-y-4">
+					{step === 0 ? (
+						<Animated.View className="flex-1" style={{ minHeight: 520, ...(enterStyle as object) }}>
+							<View className="items-center justify-center flex-1">
+								<H1 className="text-center">Créer un événement</H1>
+								<Muted className="text-center mt-2">Renseigne quelques informations en 5 étapes rapides.</Muted>
+							</View>
+						</Animated.View>
+					) : (
+						<Animated.View className="flex-1" style={{ minHeight: 520, ...(enterStyle as object) }}>
+							{/* Step contents */}
+							{step === 1 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 520, justifyContent: 'center' }}>
+									<H1 className="text-center">Informations de base</H1>
+									<Input className="w-11/12" placeholder="Titre de l’événement" value={title} onChangeText={setTitle} />
+									<Input className="w-11/12" placeholder="Description (facultatif)" value={description} onChangeText={setDescription} />
+								</View>
+							) : null}
+
+							{step === 2 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 560, justifyContent: 'center', paddingTop: Math.max(insets.top, 12) + 24 }}>
+									<H1 className="text-center">Sport & niveau</H1>
+									<Muted>Sport</Muted>
+									<View className="w-11/12 self-center flex-row flex-wrap gap-2 justify-center">
+										{(sports.length ? sports : [
+											{ id: 30, name: "Football", emoji: "⚽" },
+											{ id: 31, name: "Basketball", emoji: "🏀" },
+											{ id: 27, name: "Course", emoji: "🏃" },
+										]).map((s) => (
+											<SportChip key={s.id} id={s.id} selected={sportId === s.id} label={`${s.emoji ?? ""} ${s.name}`} />
+										))}
+									</View>
+								</View>
+							) : null}
+
+							{step === 3 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 520, justifyContent: 'center', paddingTop: Math.max(insets.top, 12) + 24 }}>
+									<H1 className="text-center">Date & heure</H1>
+									<Pressable className="w-11/12 rounded-md bg-card px-4 py-3" onPress={() => { setShowTimePicker(false); setShowDatePicker(true); }}>
+										<Text>{dateValue ? dateValue.toLocaleDateString() : "Choisir une date"}</Text>
+									</Pressable>
+									{showDatePicker ? (
+										<View className="w-11/12 rounded-md bg-card p-2">
+											<DateTimePicker
+												value={dateValue ?? new Date()}
+												mode="date"
+												display={Platform.OS === 'ios' ? 'inline' : 'default'}
+												onChange={(event: any, selectedDate?: Date) => {
+													if (selectedDate && event?.type !== 'dismissed') setDateValue(selectedDate);
+													if (Platform.OS !== 'ios') setShowDatePicker(false);
+												}}
+											/>
+											{Platform.OS === 'ios' ? (
+												<Pressable className="self-end px-3 py-2" onPress={() => setShowDatePicker(false)}>
+													<Text>Fermer</Text>
+												</Pressable>
+											) : null}
+										</View>
+									) : null}
+									<Pressable className="w-11/12 rounded-md bg-card px-4 py-3" onPress={() => { setShowDatePicker(false); setShowTimePicker(true); }}>
+										<Text>{timeValue ? timeValue.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Choisir une heure"}</Text>
+									</Pressable>
+									{showTimePicker ? (
+										<View className="w-11/12 rounded-md bg-card p-2">
+											<DateTimePicker
+												value={timeValue ?? new Date()}
+												mode="time"
+												display={Platform.OS === 'ios' ? 'inline' : 'default'}
+												onChange={(event: any, selectedDate?: Date) => {
+													if (selectedDate && event?.type !== 'dismissed') setTimeValue(selectedDate);
+													if (Platform.OS !== 'ios') setShowTimePicker(false);
+												}}
+											/>
+											{Platform.OS === 'ios' ? (
+												<Pressable className="self-end px-3 py-2" onPress={() => setShowTimePicker(false)}>
+													<Text>Fermer</Text>
+												</Pressable>
+											) : null}
+										</View>
+									) : null}
+									<Muted>Astuce: ces champs sont visuels pour l’instant.</Muted>
+								</View>
+							) : null}
+
+							{step === 4 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 520, justifyContent: 'center' }}>
+									<H1 className="text-center">Lieu</H1>
+									<Input className="w-11/12" placeholder="Recherche d’adresse" value={addressQuery} onChangeText={setAddressQuery} />
+									{suggestions.length ? (
+										<View className="w-11/12 rounded-md bg-card border border-border max-h-56">
+											<ScrollView>
+												{suggestions.map((item, idx) => (
+													<Pressable
+														key={String(item?.properties?.place_id ?? item?.properties?.datasource?.raw?.osm_id ?? idx)}
+														className="px-3 py-2 border-b border-border"
+														onPress={() => {
+															const p = item?.properties;
+															const formatted = p?.formatted ?? "";
+															setAddressText(formatted);
+															setAddressQuery(formatted);
+															setPlaceId(String(p?.place_id ?? ""));
+															const lat = p?.lat ?? item?.geometry?.coordinates?.[1];
+															const lon = p?.lon ?? item?.geometry?.coordinates?.[0];
+															setLatitude(typeof lat === 'number' ? lat : Number(lat));
+															setLongitude(typeof lon === 'number' ? lon : Number(lon));
+															setSuggestions([]);
+														}}
+													>
+														<Text numberOfLines={2}>{item?.properties?.formatted ?? '-'}</Text>
+													</Pressable>
+												))}
+											</ScrollView>
+										</View>
+									) : null}
+									{addressText ? <Muted className="w-11/12 text-center">{addressText}</Muted> : null}
+									<View className="items-center mt-2">
+										{(latitude != null && longitude != null) ? (
+											<View style={{ width: 320, height: 180, borderRadius: 12, overflow: 'hidden' }}>
+												{Platform.OS === 'web' ? (
+													(() => {
+														const staticUrl = GEOAPIFY_API_KEY ? `https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=640&height=360&center=lonlat:${longitude},${latitude}&zoom=14&marker=lonlat:${longitude},${latitude};type:material;color:%23ff0000&apiKey=${GEOAPIFY_API_KEY}` : null;
+														return staticUrl ? <Image source={{ uri: staticUrl }} style={{ width: 320, height: 180 }} /> : <View className="w-full h-full bg-muted" />;
+													})()
+												) : (
+													(() => {
+														const RNMaps: any = require('react-native-maps');
+														return (
+															<RNMaps.default
+																style={{ width: '100%', height: '100%' }}
+																initialRegion={{ latitude: Number(latitude), longitude: Number(longitude), latitudeDelta: 0.01, longitudeDelta: 0.01 }}
+															>
+																<RNMaps.Marker coordinate={{ latitude: Number(latitude), longitude: Number(longitude) }} />
+															</RNMaps.default>
+														);
+													})()
+												)}
+											</View>
+										) : (
+											<View className="items-center">
+												<Svg width={320} height={160} viewBox="0 0 320 160">
+													<Defs>
+														<SvgLinearGradient id="preview" x1="0" y1="0" x2="1" y2="1">
+															<Stop offset="0%" stopColor="#F59E0B" />
+															<Stop offset="33%" stopColor="#10B981" />
+															<Stop offset="66%" stopColor="#06B6D4" />
+															<Stop offset="100%" stopColor="#3B82F6" />
+														</SvgLinearGradient>
+													</Defs>
+													<Rect x="1" y="1" width="318" height="158" rx="12" ry="12" stroke="url(#preview)" strokeWidth="2" fill="none" strokeDasharray="6 6" />
+												</Svg>
+												<Muted className="mt-2">Sélectionne une adresse pour voir la carte</Muted>
+											</View>
+										)}
+									</View>
+								</View>
+							) : null}
+
+							{step === 5 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 520, justifyContent: 'center' }}>
+									<H1 className="text-center">Détails</H1>
+									<Muted>Niveau</Muted>
+									<LevelTabs />
+									<Input className="w-11/12" placeholder="Capacité (1 à 100)" value={capacity} onChangeText={setCapacity} keyboardType="number-pad" />
+								</View>
+							) : null}
+
+							{step === 6 ? (
+								<View className="gap-y-4 items-center" style={{ minHeight: 520, justifyContent: 'center' }}>
+									<H1>Visuel & résumé</H1>
+									<View className="items-center">
+										{coverUri ? (
+											<Pressable onPress={pickCover}>
+												<Image source={{ uri: coverUri }} style={{ width: 320, height: 180, borderRadius: 12 }} />
+											</Pressable>
+										) : (
+											<Pressable onPress={pickCover}>
+												<Svg width={320} height={180} viewBox="0 0 320 180">
+												<Defs>
+													<SvgLinearGradient id="coverGrad" x1="0" y1="0" x2="1" y2="1">
+														<Stop offset="0%" stopColor="#F59E0B" />
+														<Stop offset="33%" stopColor="#10B981" />
+														<Stop offset="66%" stopColor="#06B6D4" />
+														<Stop offset="100%" stopColor="#3B82F6" />
+													</SvgLinearGradient>
+												</Defs>
+												<Rect x="1" y="1" width="318" height="178" rx="12" ry="12" stroke="url(#coverGrad)" strokeWidth="2" fill="none" strokeDasharray="6 6" />
+											</Svg>
+											</Pressable>
+										)}
+										<Muted className="mt-2">Ajouter une image de couverture (visuel)</Muted>
+									</View>
+									<View className="rounded-md bg-card p-3 w-11/12">
+										<Text className="font-semibold">Résumé</Text>
+										<Muted>{title || "(Sans titre)"}</Muted>
+										<Muted>{sportId ? `Sport #${sportId}` : "Sport non choisi"}</Muted>
+										<Muted>{`Niveau: ${level}`}</Muted>
+										<Muted>{dateValue && timeValue ? `${dateValue.toLocaleDateString()} • ${timeValue.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Date/heure non définies"}</Muted>
+										<Muted>{addressText || "Adresse non définie"}</Muted>
+										<Muted>{capacity ? `Capacité: ${capacity}` : "Capacité non définie"}</Muted>
+										<Muted numberOfLines={2}>{description || "(Pas de description)"}</Muted>
+									</View>
+								</View>
+							) : null}
+
+						</Animated.View>
+					)}
+				</View>
+			</ScrollView>
+
+			{/* Footer overlays */}
+			{step === 0 ? (
+				<View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+					<View style={{ height: 180 + insets.bottom, position: "relative" }}>
+						<BottomWave />
+						<View style={{ position: "absolute", right: 16, bottom: Math.max(insets.bottom, 12) }}>
+							<Pressable accessibilityRole="button" onPress={handleNext} className="flex-row items-center rounded-full bg-white px-5 h-14">
+								<Text className="mr-2">Commencer</Text>
+								<Ionicons name="chevron-forward" size={24} color="#111827" />
+							</Pressable>
+						</View>
+					</View>
+				</View>
+			) : (
+				<View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+					<View style={{ height: 180 + insets.bottom, position: "relative" }}>
+						<BottomWave />
+						{/* Back */}
+						<View style={{ position: "absolute", left: 16, bottom: Math.max(insets.bottom, 12) }}>
+							<Pressable accessibilityRole="button" onPress={handleBack} className="flex-row items-center rounded-full bg-white px-5 h-14">
+								<Ionicons name="chevron-back" size={24} color="#111827" />
+								<Text className="ml-2">Retour</Text>
+							</Pressable>
+						</View>
+						{/* Next / Publish */}
+						<View style={{ position: "absolute", right: 16, bottom: Math.max(insets.bottom, 12) }}>
+							<Pressable accessibilityRole="button" onPress={step < totalSteps ? handleNext : handlePublish} className="flex-row items-center rounded-full bg-white px-5 h-14">
+								<Text className="mr-2">{step < totalSteps ? "Suivant" : (publishing ? "Publication…" : "Publier")}</Text>
+								<Ionicons name="chevron-forward" size={24} color="#111827" />
+							</Pressable>
+						</View>
+					</View>
+				</View>
+			)}
+		</View>
+	);
 }
-
-
