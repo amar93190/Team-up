@@ -2,6 +2,7 @@ import { Image, ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -137,15 +138,27 @@ export default function ProfileScreen() {
 					{/* TikTok-like segmented control + Tab content on white background */}
 					<View className="bg-white" style={{ marginHorizontal: -16 }}>
 						<View className="px-0">
-							<View className="flex-row bg-muted rounded-full p-1">
-								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='events' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('events')}>
-									<Text className={`${activeTab==='events' ? 'text-primary-foreground' : ''}`}>Événements</Text>
+							<View className="flex-row">
+								<Pressable
+									className="flex-1 items-center py-2"
+									onPress={() => setActiveTab('events')}
+									style={{ borderBottomWidth: 2, borderBottomColor: activeTab==='events' ? '#000' : 'transparent' }}
+								>
+									<Ionicons name="calendar" size={20} color={activeTab==='events' ? '#111827' : '#6B7280'} />
 								</Pressable>
-								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='media' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('media')}>
-									<Text className={`${activeTab==='media' ? 'text-primary-foreground' : ''}`}>Médias</Text>
+								<Pressable
+									className="flex-1 items-center py-2"
+									onPress={() => setActiveTab('media')}
+									style={{ borderBottomWidth: 2, borderBottomColor: activeTab==='media' ? '#000' : 'transparent' }}
+								>
+									<Ionicons name="images" size={20} color={activeTab==='media' ? '#111827' : '#6B7280'} />
 								</Pressable>
-								<Pressable className={`flex-1 items-center py-2 rounded-full ${activeTab==='favorites' ? 'bg-primary' : ''}`} onPress={() => setActiveTab('favorites')}>
-									<Text className={`${activeTab==='favorites' ? 'text-primary-foreground' : ''}`}>Favoris</Text>
+								<Pressable
+									className="flex-1 items-center py-2"
+									onPress={() => setActiveTab('favorites')}
+									style={{ borderBottomWidth: 2, borderBottomColor: activeTab==='favorites' ? '#000' : 'transparent' }}
+								>
+									<Ionicons name="heart" size={20} color={activeTab==='favorites' ? '#111827' : '#6B7280'} />
 								</Pressable>
 							</View>
 						</View>
@@ -155,19 +168,24 @@ export default function ProfileScreen() {
 							{activeTab === 'events' ? (
 								<View className="gap-y-3">
 									<Muted>Mes événements</Muted>
-									<View className="flex-row flex-wrap justify-between gap-y-3">
+									<View className="flex-row flex-wrap justify-between gap-y-4">
 										{myEvents.map((e) => (
 											<Pressable
 												key={e.id}
 												style={{ width: '32%' }}
-												className="aspect-square rounded-md overflow-hidden bg-muted"
+												className="rounded-md overflow-hidden bg-card border border-border"
 												onPress={() => router.push(`/(protected)/events/${e.id}`)}
 											>
-												{e.cover_url ? (
-													<Image source={{ uri: e.cover_url }} style={{ width: '100%', height: '100%' }} />
-												) : (
-													<View className="w-full h-full bg-muted" />
-												)}
+												<View className="w-full" style={{ height: 200 }}>
+													{e.cover_url ? (
+														<Image source={{ uri: e.cover_url }} style={{ width: '100%', height: '100%' }} />
+													) : (
+														<View className="w-full h-full bg-muted" />
+													)}
+												</View>
+												<View className="p-2">
+													<Text className="text-sm font-medium" numberOfLines={1}>{e.title}</Text>
+												</View>
 											</Pressable>
 										))}
 									</View>
