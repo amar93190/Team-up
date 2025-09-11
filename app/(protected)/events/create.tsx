@@ -173,13 +173,19 @@ export default function CreateEventScreen() {
 	}
 
 	function combineDateTime(d: Date | null, t: Date | null): string | null {
-		if (!d || !t) return null;
-		const combined = new Date(d);
-		combined.setHours(t.getHours());
-		combined.setMinutes(t.getMinutes());
-		combined.setSeconds(0);
-		combined.setMilliseconds(0);
-		return combined.toISOString();
+		if (!d && !t) return null;
+		const base = new Date(d ?? t ?? new Date());
+		if (t) {
+			base.setHours(t.getHours());
+			base.setMinutes(t.getMinutes());
+		} else {
+			// Default to midday if no time selected
+			base.setHours(12);
+			base.setMinutes(0);
+		}
+		base.setSeconds(0);
+		base.setMilliseconds(0);
+		return base.toISOString();
 	}
 
 	async function handlePublish() {
@@ -198,6 +204,11 @@ export default function CreateEventScreen() {
 		setPublishing(true);
 		try {
 			const start_at = combineDateTime(dateValue, timeValue);
+			if (!start_at) {
+				Alert.alert('Date requise', 'Choisis au moins une date.');
+				setPublishing(false);
+				return;
+			}
 			const insertPayload: any = {
 				owner_id: userId,
 				title: title.trim(),

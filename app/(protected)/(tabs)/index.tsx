@@ -85,6 +85,16 @@ export default function Home() {
     const section1 = events.slice(0, firstCount);
     const section2 = events.slice(firstCount, firstCount + secondCount);
     const section3 = events.slice(firstCount + secondCount);
+    // Fallback client-side sort by start_at if needed
+    const sortWithPastLast = (arr: any[]) => {
+        const now = Date.now();
+        const withDate = arr.filter((e) => e.start_at);
+        const noDate = arr.filter((e) => !e.start_at);
+        const upcoming = withDate.filter((e) => new Date(e.start_at).getTime() >= now).sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+        const past = withDate.filter((e) => new Date(e.start_at).getTime() < now).sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+        arr.splice(0, arr.length, ...upcoming, ...noDate, ...past);
+    };
+    [section1, section2, section3].forEach(sortWithPastLast);
 
     const headerTop = Math.max(insets.top + 8, 20);
 

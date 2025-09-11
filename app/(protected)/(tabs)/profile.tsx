@@ -56,8 +56,20 @@ export default function ProfileScreen() {
 				.from("events")
 				.select("id,title,cover_url,start_at")
 				.eq("owner_id", userId)
-				.order("created_at", { ascending: false });
-			setMyEvents(ev.data ?? []);
+				.order("start_at", { ascending: true });
+			{
+				const data = ev.data ?? [];
+				const now = Date.now();
+				const withDate = data.filter((e: any) => !!e.start_at);
+				const noDate = data.filter((e: any) => !e.start_at);
+				const upcoming = withDate
+					.filter((e: any) => new Date(e.start_at).getTime() >= now)
+					.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+				const past = withDate
+					.filter((e: any) => new Date(e.start_at).getTime() < now)
+					.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+				setMyEvents([...upcoming, ...noDate, ...past]);
+			}
 		})();
 	}, [userId]);
 
@@ -169,7 +181,9 @@ export default function ProfileScreen() {
 								<View className="gap-y-3">
 									<Muted>Mes événements</Muted>
 									<View className="flex-row flex-wrap justify-between gap-y-4">
-										{myEvents.map((e) => (
+										{myEvents.map((e) => {
+											const isPast = e?.start_at ? new Date(e.start_at).getTime() < Date.now() : false;
+											return (
 											<Pressable
 												key={e.id}
 												style={{ width: '32%' }}
@@ -182,12 +196,20 @@ export default function ProfileScreen() {
 													) : (
 														<View className="w-full h-full bg-muted" />
 													)}
+													{isPast ? (
+														<View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+															<View style={{ width: '100%', backgroundColor: 'rgba(244,63,94,0.95)', paddingVertical: 10 }}>
+																<Text className="text-white text-center text-base font-semibold">TERMINÉ</Text>
+															</View>
+														</View>
+													) : null}
 												</View>
 												<View className="p-2">
 													<Text className="text-sm font-medium" numberOfLines={1}>{e.title}</Text>
 												</View>
 											</Pressable>
-										))}
+										);
+										})}
 									</View>
 								</View>
 							) : activeTab === 'media' ? (

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from "expo-router";
-import { Image, ScrollView, View, Linking, Pressable, Alert } from "react-native";
+import { Image, ScrollView, View, Linking, Pressable, Alert, Platform } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
@@ -19,6 +19,7 @@ export default function EventDetails() {
     const [mapLon, setMapLon] = useState<number | null>(null);
     const [mapError, setMapError] = useState(false);
     const [pending, setPending] = useState<any[]>([]);
+    const [profilesById, setProfilesById] = useState<Record<string, { id: string; first_name?: string | null; last_name?: string | null; avatar_url?: string | null }>>({});
     const [decisionLoading, setDecisionLoading] = useState<string | null>(null);
     const [approvedCount, setApprovedCount] = useState<number>(0);
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
@@ -69,7 +70,24 @@ export default function EventDetails() {
                 .eq("event_id", data.id)
                 .eq("status", "pending")
                 .order("created_at", { ascending: true });
-            setPending(r.data ?? []);
+            const rows = r.data ?? [];
+            setPending(rows);
+            const ids = Array.from(new Set(rows.map((x: any) => x.user_id).filter(Boolean)));
+            if (ids.length) {
+                const pp = await supabase
+                    .from("profiles")
+                    .select("id,first_name,last_name,avatar_url")
+                    .in("id", ids);
+                if (!pp.error && pp.data) {
+                    const map: Record<string, any> = {};
+                    for (const p of pp.data as any[]) map[p.id] = p;
+                    setProfilesById(map);
+                } else {
+                    setProfilesById({});
+                }
+            } else {
+                setProfilesById({});
+            }
         }
         if (data?.id) {
             const { count } = await supabase
@@ -174,13 +192,29 @@ export default function EventDetails() {
                     ) : null}
                     {event.start_at ? <Muted>{new Date(event.start_at).toLocaleString()}</Muted> : null}
                     {event.address_text ? <Muted>{event.address_text}</Muted> : null}
-                    {staticMapUrl ? (
+                    {(mapLat != null && mapLon != null) ? (
                         <View style={{ position: "relative" }}>
-                            <Image
-                                source={{ uri: staticMapUrl }}
-                                style={{ width: "100%", height: 180, borderRadius: 8 }}
-                                onError={() => setMapError(true)}
-                            />
+                            {Platform.OS === 'web' ? (
+                                staticMapUrl ? (
+                                    <Image
+                                        source={{ uri: staticMapUrl }}
+                                        style={{ width: "100%", height: 180, borderRadius: 8 }}
+                                        onError={() => setMapError(true)}
+                                    />
+                                ) : null
+                            ) : (
+                                (() => {
+                                    const RNMaps: any = require('react-native-maps');
+                                    return (
+                                        <RNMaps.default
+                                            style={{ width: '100%', height: 180, borderRadius: 8 }}
+                                            initialRegion={{ latitude: Number(mapLat), longitude: Number(mapLon), latitudeDelta: 0.01, longitudeDelta: 0.01 }}
+                                        >
+                                            <RNMaps.Marker coordinate={{ latitude: Number(mapLat), longitude: Number(mapLon) }} />
+                                        </RNMaps.default>
+                                    );
+                                })()
+                            )}
                             {typeof event.capacity === "number" ? (
                                 <View className="absolute top-2 right-2 rounded-full bg-primary px-2 py-1">
                                     <Text className="text-primary-foreground text-xs">{approvedCount}/{event.capacity}</Text>
@@ -273,9 +307,21 @@ export default function EventDetails() {
                     <View className="p-4 gap-y-2">
                         <Muted>Demandes d’inscription</Muted>
                         <View className="gap-y-2">
-                            {pending.map((r) => (
-                                <View key={`${r.user_id}`} className="rounded-md border border-border bg-card p-3 gap-y-1">
-                                    <Text>{r.user_id}</Text>
+                            {pending.map((r) => {
+                                const p = profilesById[r.user_id];
+                                const fullName = `${p?.first_name ?? ''} ${p?.last_name ?? ''}`.trim() || r.user_id;
+                                return (
+                                <View key={`${r.user_id}`} className="rounded-md border border-border bg-card p-3 gap-y-2">
+                                    <Pressable className="flex-row items-center gap-x-3" onPress={() => router.push(`/(protected)/profiles/${r.user_id}`)}>
+                                        {p?.avatar_url ? (
+                                            <Image source={{ uri: p.avatar_url }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                                        ) : (
+                                            <View style={{ width: 44, height: 44, borderRadius: 22 }} className="bg-muted items-center justify-center">
+                                                <Text>{(p?.first_name?.[0] ?? '?').toUpperCase()}</Text>
+                                            </View>
+                                        )}
+                                        <Text className="text-base">{fullName}</Text>
+                                    </Pressable>
                                     <View className="flex-row gap-x-2">
                                         <Button variant="default" disabled={decisionLoading === r.user_id || (typeof event.capacity === "number" && approvedCount >= event.capacity)} onPress={async () => {
                                             try {
@@ -315,7 +361,7 @@ export default function EventDetails() {
                                         </Button>
                                     </View>
                                 </View>
-                            ))}
+                            );})}
                             {pending.length === 0 ? <Muted>Aucune demande en attente.</Muted> : null}
                         </View>
                     </View>

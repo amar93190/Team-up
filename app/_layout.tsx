@@ -8,6 +8,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { NotificationCenterProvider } from "@/context/notification-center";
 import { useEffect } from "react";
 import { registerForPushNotificationsAsync, savePushToken } from "@/lib/push";
+import { View } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,9 +32,14 @@ export default function RootLayout() {
 function RootNavigator() {
 	const { initialized, session } = useAuth();
 
-	if (!initialized) return;
-	else {
-		SplashScreen.hideAsync();
+	useEffect(() => {
+		if (initialized) {
+			SplashScreen.hideAsync().catch(() => {});
+		}
+	}, [initialized]);
+
+	if (!initialized) {
+		return <View style={{ flex: 1 }} />;
 	}
 
 	return (
