@@ -276,7 +276,6 @@ export default function CreateEventScreen() {
 				capacity: capacity ? Number(capacity) : null,
 				cover_url: null,
 				sport_id: sportId,
-				is_public: isPublicPlace ? true : null,
 			};
 			const { data, error } = await supabase.from('events').insert(insertPayload).select('id').maybeSingle();
 			if (error || !data?.id) {

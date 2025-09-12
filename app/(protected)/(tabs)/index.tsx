@@ -20,7 +20,7 @@ import { listFavoriteEventIds, toggleEventFavorite } from "@/lib/favorites";
 export default function Home() {
     const { session } = useAuth();
     const toast = useToast();
-    const { unreadCount, add } = useNotificationCenter();
+    const { unreadCount, add, markAllRead } = useNotificationCenter();
     const [checkedProfile, setCheckedProfile] = useState(false);
     const [events, setEvents] = useState<any[]>([]);
     const insets = useSafeAreaInsets();
@@ -122,7 +122,15 @@ export default function Home() {
                 <Pressable
                     accessibilityRole="button"
                     className="h-10 w-10 items-center justify-center rounded-full bg-white/80 relative"
-                    onPress={() => router.push("/(protected)/notifications")}
+                    onPress={() => {
+                        if (unreadCount > 0) {
+                            const s = unreadCount > 1 ? 'notifications' : 'notification';
+                            toast.show(`${unreadCount} ${s} non lues`, 'Notifications');
+                            markAllRead();
+                        } else {
+                            toast.show('Aucune nouvelle notification');
+                        }
+                    }}
                 >
                     <Ionicons name="notifications" size={18} />
                     {unreadCount > 0 ? (

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/config/supabase";
 import { useAuth } from "@/context/supabase-provider";
 import { isEventFavorited, toggleEventFavorite } from "@/lib/favorites";
+import { listMyTeamsByEvent, listTeamMemberProfiles } from "@/lib/teams";
 
 export default function EventDetails() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,6 +28,9 @@ export default function EventDetails() {
     const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY as string | undefined;
     const [registrationStatus, setRegistrationStatus] = useState<"none" | "pending" | "approved">("none");
     const [isFavorite, setIsFavorite] = useState<boolean>(false);
+    const [myTeams, setMyTeams] = useState<any[]>([]);
+    const [teamDetail, setTeamDetail] = useState<{ id: string; name: string } | null>(null);
+    const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
     async function loadEvent() {
         const { data } = await supabase
@@ -116,6 +120,8 @@ export default function EventDetails() {
             if (data?.id) {
                 const fav = await isEventFavorited(session.user.id, String(data.id));
                 setIsFavorite(fav);
+                const teams = await listMyTeamsByEvent(session.user.id, String(data.id));
+                setMyTeams(teams);
             }
         }
     }
@@ -320,6 +326,44 @@ export default function EventDetails() {
                         <Text>Fermer</Text>
                     </Button>
                 </View>
+
+                {myTeams.length > 0 ? (
+                    <View className="p-4 gap-y-2">
+                        <Muted>Mes équipes pour cet événement</Muted>
+                        <View className="gap-y-2">
+                            {myTeams.map((t) => (
+                                <View key={t.id} className="rounded-md border border-border bg-card p-3">
+                                    <View className="flex-row items-center justify-between">
+                                        <Text className="text-base font-medium" numberOfLines={1}>{t.name}</Text>
+                                        <Button variant="secondary" onPress={async () => {
+                                            setTeamDetail({ id: t.id, name: t.name });
+                                            const mem = await listTeamMemberProfiles(t.id);
+                                            setTeamMembers(mem);
+                                        }}>
+                                            <Text>Voir</Text>
+                                        </Button>
+                                    </View>
+                                    <Muted>Code: {t.invite_code}</Muted>
+                                </View>
+                            ))}
+                        </View>
+                        {teamDetail ? (
+                            <View className="rounded-md border border-border bg-card p-3 gap-y-2">
+                                <Text className="text-base font-semibold">{teamDetail.name}</Text>
+                                {teamMembers.map((m) => (
+                                    <View key={m.id} className="flex-row items-center gap-x-3">
+                                        {m.avatar_url ? (
+                                            <Image source={{ uri: m.avatar_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                                        ) : (
+                                            <View style={{ width: 40, height: 40, borderRadius: 20 }} className="bg-muted" />
+                                        )}
+                                        <Text className="text-base">{`${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || m.id}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null}
+                    </View>
+                ) : null}
 
                 {event.owner_id === session?.user.id && (
                     <View className="p-4 gap-y-2">
