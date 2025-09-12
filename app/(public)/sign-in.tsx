@@ -56,7 +56,7 @@ export default function SignIn() {
 					<Path d="M0 0 H400 V120 C320 180 150 110 0 160 Z" fill="url(#signinGrad)" />
 				</Svg>
 				<View className="absolute left-4 top-10">
-					<H1 className="text-white">Sign In</H1>
+					<H1 className="text-white">Connexion</H1>
 				</View>
 			</View>
 			<View className="flex-1 gap-4 p-4 web:m-4">

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, View, Alert } from "react-native";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as z from "zod";
@@ -57,6 +57,18 @@ export default function SignUp() {
 		try {
 			await signUp(data.email, data.password);
 
+			// Afficher un message de confirmation
+			Alert.alert(
+				"Inscription réussie !",
+				"Votre compte a été créé avec succès. Veuillez vérifier votre email pour confirmer votre inscription.",
+				[
+					{
+						text: "OK",
+						style: "default"
+					}
+				]
+			);
+
 			form.reset();
 		} catch (error: Error | any) {
 			console.error(error.message);
@@ -79,7 +91,7 @@ export default function SignUp() {
 					<Path d="M0 0 H400 V120 C320 180 150 110 0 160 Z" fill="url(#signupGrad)" />
 				</Svg>
 				<View className="absolute left-4 top-10">
-					<H1 className="text-white">Sign Up</H1>
+					<H1 className="text-white">Inscription</H1>
 				</View>
 			</View>
 			<View className="flex-1 gap-4 p-4 web:m-4">

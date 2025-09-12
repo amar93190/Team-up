@@ -1,8 +1,8 @@
 import { Image, Pressable, ScrollView, View } from "react-native";
 import { Modal } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/button";
@@ -38,50 +38,60 @@ export default function EventsScreen() {
 	const [joining, setJoining] = useState(false);
 	const [isEventPickerOpen, setIsEventPickerOpen] = useState(false);
 
-	useEffect(() => {
-		(async () => {
-			if (!userId) return;
-			const rr = await supabase
-				.from("event_registrations")
-				.select("event_id,status,created_at")
-				.eq("user_id", userId)
-				.order("created_at", { ascending: false });
-			const rows = rr.data ?? [];
-			let pendingIds: (string | number)[] = [];
-			let approvedIds: (string | number)[] = [];
-			if (!rr.error) {
-				pendingIds = rows.filter((r: any) => r.status === "pending").map((r: any) => r.event_id);
-				approvedIds = rows.filter((r: any) => r.status === "approved").map((r: any) => r.event_id);
-				if (pendingIds.length === 0 && approvedIds.length === 0 && rows.length > 0) {
-					approvedIds = rows.map((r: any) => r.event_id);
-				}
+	// Fonction pour recharger toutes les données
+	const reloadAllData = async () => {
+		if (!userId) return;
+		const rr = await supabase
+			.from("event_registrations")
+			.select("event_id,status,created_at")
+			.eq("user_id", userId)
+			.order("created_at", { ascending: false });
+		const rows = rr.data ?? [];
+		let pendingIds: (string | number)[] = [];
+		let approvedIds: (string | number)[] = [];
+		if (!rr.error) {
+			pendingIds = rows.filter((r: any) => r.status === "pending").map((r: any) => r.event_id);
+			approvedIds = rows.filter((r: any) => r.status === "approved").map((r: any) => r.event_id);
+			if (pendingIds.length === 0 && approvedIds.length === 0 && rows.length > 0) {
+				approvedIds = rows.map((r: any) => r.event_id);
 			}
-			const fetchEvents = async (ids: (string | number)[]) => {
-				if (!ids.length) return [] as any[];
-				const { data, error } = await supabase
-					.from("events")
-					.select("id,title,cover_url,start_at,address_text,capacity")
-					.in("id", ids);
-				if (error) return [] as any[];
-				const list = (data ?? []).slice();
-				list.sort((a: any, b: any) => new Date(a.start_at || 0).getTime() - new Date(b.start_at || 0).getTime());
-				return list;
-			};
-			const [pE, aE] = await Promise.all([fetchEvents(pendingIds), fetchEvents(approvedIds)]);
-			setPendingEvents(pE);
-			setApprovedEvents(aE);
-
-			const mine = await supabase
+		}
+		const fetchEvents = async (ids: (string | number)[]) => {
+			if (!ids.length) return [] as any[];
+			const { data, error } = await supabase
 				.from("events")
 				.select("id,title,cover_url,start_at,address_text,capacity")
-				.eq("owner_id", userId)
-				.order("start_at", { ascending: true });
-			setOwnedEvents(mine.data ?? []);
+				.in("id", ids);
+			if (error) return [] as any[];
+			const list = (data ?? []).slice();
+			list.sort((a: any, b: any) => new Date(a.start_at || 0).getTime() - new Date(b.start_at || 0).getTime());
+			return list;
+		};
+		const [pE, aE] = await Promise.all([fetchEvents(pendingIds), fetchEvents(approvedIds)]);
+		setPendingEvents(pE);
+		setApprovedEvents(aE);
 
-			const teams = await listMyTeams(userId);
-			setMyTeams(teams);
-		})();
+		const mine = await supabase
+			.from("events")
+			.select("id,title,cover_url,start_at,address_text,capacity")
+			.eq("owner_id", userId)
+			.order("start_at", { ascending: true });
+		setOwnedEvents(mine.data ?? []);
+
+		const teams = await listMyTeams(userId);
+		setMyTeams(teams);
+	};
+
+	useEffect(() => {
+		reloadAllData();
 	}, [userId]);
+
+	// Recharger les données quand l'utilisateur revient sur cette page
+	useFocusEffect(
+		useCallback(() => {
+			reloadAllData();
+		}, [userId])
+	);
 
 	const creatableEvents = useMemo(() => {
 		const now = Date.now();
@@ -248,7 +258,8 @@ export default function EventsScreen() {
 									if (!team) { alert(error ?? "Échec de création"); return; }
 									alert(`Équipe créée. Code: ${team.invite_code}`);
 									setIsCreateOpen(false);
-									setMyTeams((prev) => [team, ...prev]);
+									// Recharger toutes les données après création d'équipe
+									setTimeout(() => reloadAllData(), 500);
 								}}>
 									<Text>{creating ? 'Création...' : "Créer l'équipe"}</Text>
 								</Button>
@@ -299,9 +310,10 @@ export default function EventsScreen() {
 							const ok = await joinTeamByCode(userId, joinCode.trim());
 							setJoining(false);
 							if (!ok) { alert("Code invalide ou équipe complète"); return; }
-							const teams = await listMyTeams(userId);
-							setMyTeams(teams);
+							alert("Équipe rejointe avec succès !");
 							setIsJoinOpen(false);
+							// Recharger toutes les données après ajout à une équipe
+							setTimeout(() => reloadAllData(), 500);
 						}}>
 							<Text>{joining ? 'Ajout...' : 'Rejoindre'}</Text>
 						</Button>

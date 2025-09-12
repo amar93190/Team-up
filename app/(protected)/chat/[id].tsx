@@ -107,6 +107,19 @@ export default function ConversationScreen() {
     });
     if (error) {
       console.error("send message error", error);
+    } else {
+      // Recharger les messages après envoi réussi pour s'assurer qu'ils s'affichent
+      setTimeout(async () => {
+        const { data, error: reloadError } = await supabase
+          .from("messages")
+          .select("id, user_id, body, created_at")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: true });
+        if (!reloadError && data) {
+          setMessages(data);
+          setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+        }
+      }, 500); // Petit délai pour laisser le temps à la base de données
     }
   };
 

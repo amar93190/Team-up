@@ -39,6 +39,10 @@ export async function savePushToken(userId: string, token: string): Promise<void
   await supabase.from("push_tokens").upsert({ user_id: userId, token });
 }
 
+export async function removePushToken(userId: string): Promise<void> {
+  await supabase.from("push_tokens").delete().eq("user_id", userId);
+}
+
 export async function sendPushNotification(token: string, title: string, body: string, data?: Record<string, any>) {
   const msg: ExpoPushMessage = { to: token, title, body, sound: "default", data };
   await fetch("https://exp.host/--/api/v2/push/send", {

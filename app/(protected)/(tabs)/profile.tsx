@@ -3,12 +3,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { useAuth } from "@/context/supabase-provider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getProfile } from "@/lib/profiles";
 import { listFavoriteEvents } from "@/lib/favorites";
 import { supabase } from "@/config/supabase";
@@ -16,6 +17,7 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { uploadUserMedia, listUserMedia, UserMedia } from "@/lib/media";
 import { Video, ResizeMode } from "expo-av";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ProfileScreen() {
 	const { signOut, session } = useAuth();
@@ -31,6 +33,7 @@ export default function ProfileScreen() {
 	const [media, setMedia] = useState<UserMedia[]>([]);
 	const [viewerOpen, setViewerOpen] = useState(false);
 	const [viewerItem, setViewerItem] = useState<UserMedia | null>(null);
+	const insets = useSafeAreaInsets();
 
 	async function pickAndUpload() {
 		try {
@@ -45,61 +48,71 @@ export default function ProfileScreen() {
 		} catch {}
 	}
 
+	// Fonction pour recharger toutes les données du profil
+	const reloadProfileData = async () => {
+		if (!userId) return;
+		const p = await getProfile(userId);
+		setProfile(p);
+		if (p?.region_id) {
+			const { data: r } = await supabase
+				.from("regions")
+				.select("name")
+				.eq("id", p.region_id)
+				.maybeSingle();
+			setRegionName(r?.name ?? null);
+		}
+		// Avatar: use stored URL or derive from storage path
+		if (p?.avatar_url) setAvatarUrl(p.avatar_url);
+		else {
+			const { data } = supabase.storage.from("public").getPublicUrl(`avatars/${userId}.jpg`);
+			if (data?.publicUrl) setAvatarUrl(data.publicUrl);
+		}
+		const { data } = await supabase
+			.from("user_sports")
+			.select("sport:sports(name,emoji)")
+			.eq("user_id", userId);
+		if (data) {
+			setSports(
+				data.map((row: any) => `${row.sport.emoji ?? ""} ${row.sport.name}`.trim()),
+			);
+		}
+		const ev = await supabase
+			.from("events")
+			.select("id,title,cover_url,start_at")
+			.eq("owner_id", userId)
+			.order("start_at", { ascending: true });
+		{
+			const data = ev.data ?? [];
+			const now = Date.now();
+			const withDate = data.filter((e: any) => !!e.start_at);
+			const noDate = data.filter((e: any) => !e.start_at);
+			const upcoming = withDate
+				.filter((e: any) => new Date(e.start_at).getTime() >= now)
+				.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+			const past = withDate
+				.filter((e: any) => new Date(e.start_at).getTime() < now)
+				.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+			setMyEvents([...upcoming, ...noDate, ...past]);
+		}
+		const favs = await listFavoriteEvents(userId);
+		setFavoriteEvents(favs);
+		const mm = await listUserMedia(userId);
+		setMedia(mm);
+	};
+
 	useEffect(() => {
-		(async () => {
-			if (!userId) return;
-			const p = await getProfile(userId);
-			setProfile(p);
-			if (p?.region_id) {
-				const { data: r } = await supabase
-					.from("regions")
-					.select("name")
-					.eq("id", p.region_id)
-					.maybeSingle();
-				setRegionName(r?.name ?? null);
-			}
-			// Avatar: use stored URL or derive from storage path
-			if (p?.avatar_url) setAvatarUrl(p.avatar_url);
-			else {
-				const { data } = supabase.storage.from("public").getPublicUrl(`avatars/${userId}.jpg`);
-				if (data?.publicUrl) setAvatarUrl(data.publicUrl);
-			}
-			const { data } = await supabase
-				.from("user_sports")
-				.select("sport:sports(name,emoji)")
-				.eq("user_id", userId);
-			if (data) {
-				setSports(
-					data.map((row: any) => `${row.sport.emoji ?? ""} ${row.sport.name}`.trim()),
-				);
-			}
-			const ev = await supabase
-				.from("events")
-				.select("id,title,cover_url,start_at")
-				.eq("owner_id", userId)
-				.order("start_at", { ascending: true });
-			{
-				const data = ev.data ?? [];
-				const now = Date.now();
-				const withDate = data.filter((e: any) => !!e.start_at);
-				const noDate = data.filter((e: any) => !e.start_at);
-				const upcoming = withDate
-					.filter((e: any) => new Date(e.start_at).getTime() >= now)
-					.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
-				const past = withDate
-					.filter((e: any) => new Date(e.start_at).getTime() < now)
-					.sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
-				setMyEvents([...upcoming, ...noDate, ...past]);
-			}
-			const favs = await listFavoriteEvents(userId);
-			setFavoriteEvents(favs);
-			const mm = await listUserMedia(userId);
-			setMedia(mm);
-		})();
+		reloadProfileData();
 	}, [userId]);
 
+	// Recharger les données quand l'utilisateur revient sur cette page
+	useFocusEffect(
+		useCallback(() => {
+			reloadProfileData();
+		}, [userId])
+	);
+
 	return (
-		<SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+		<SafeAreaView className="flex-1 bg-background" edges={["top","bottom"]}>
 			{/* subtle full-page rainbow gradient */}
 			<LinearGradient
 				colors={["#F59E0B", "#10B981", "#06B6D4", "#3B82F6"]}
@@ -108,6 +121,19 @@ export default function ProfileScreen() {
 				style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.16 }}
 				pointerEvents="none"
 			/>
+			{/* Settings gear button */}
+			<View style={{ position: 'absolute', top: Math.max(insets.top + 8, 20), right: 16, zIndex: 5 }}>
+				<Pressable accessibilityRole="button" className="h-10 w-10 items-center justify-center rounded-full bg-white/80" onPress={() => router.push('/(protected)/settings')}>
+					<Ionicons name="settings" size={18} />
+				</Pressable>
+			</View>
+			{/* Edit pencil button */}
+			<View style={{ position: 'absolute', top: Math.max(insets.top + 8, 20), left: 16, zIndex: 5 }}>
+				<Pressable accessibilityRole="button" className="h-10 w-10 items-center justify-center rounded-full bg-white/80" onPress={() => router.push('/(protected)/profile-edit')}>
+					<Ionicons name="pencil" size={18} />
+				</Pressable>
+			</View>
+
 			<ScrollView className="flex-1" style={{ position: "relative", zIndex: 1 }}>
 				{/* Gradient header with deeper rounded bottom */}
 				<View style={{ height: 180, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", position: "relative", zIndex: 2, backgroundColor: "transparent" }}>
@@ -197,6 +223,7 @@ export default function ProfileScreen() {
 								>
 									<Ionicons name="heart" size={20} color={activeTab==='favorites' ? '#111827' : '#6B7280'} />
 								</Pressable>
+							</View>
 						</View>
 					</View>
 
@@ -299,13 +326,6 @@ export default function ProfileScreen() {
 							</View>
 						)}
 					</View>
-				</View>
-
-					<Button className="m-4" variant="default" onPress={async () => {
-						await signOut();
-					}}>
-						<Text>Se déconnecter</Text>
-					</Button>
 				</View>
 			</ScrollView>
 		{/* Media viewer modal */}

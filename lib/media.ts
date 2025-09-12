@@ -48,8 +48,26 @@ export async function uploadUserMedia(userId: string, localUri: string, mimeType
     }
 }
 
-export async function deleteUserMedia(id: string) {
+export async function deleteUserMedia(id: string, url?: string) {
     try {
+        // Try to delete underlying storage object if URL provided
+        if (url) {
+            try {
+                const marker = '/storage/v1/object/public/';
+                const idx = url.indexOf(marker);
+                if (idx >= 0) {
+                    const after = url.substring(idx + marker.length); // e.g. public/media/uid/file.jpg
+                    const firstSlash = after.indexOf('/');
+                    if (firstSlash > 0) {
+                        const bucket = after.substring(0, firstSlash); // 'public'
+                        const path = after.substring(firstSlash + 1); // 'media/...'
+                        if (bucket && path) {
+                            await supabase.storage.from(bucket).remove([path]);
+                        }
+                    }
+                }
+            } catch {}
+        }
         const { error } = await supabase.from('user_media').delete().eq('id', id);
         if (error) throw error;
         return true;
